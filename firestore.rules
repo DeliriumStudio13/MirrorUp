@@ -1,0 +1,191 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function getBusinessId() {
+      return getUserData().businessId;
+    }
+    
+    function isAdmin() {
+      return getUserData().role == 'admin';
+    }
+    
+    function isHR() {
+      return getUserData().role == 'hr';
+    }
+    
+    function isManager() {
+      return getUserData().role == 'manager';
+    }
+    
+    function isEmployee() {
+      return getUserData().role == 'employee';
+    }
+    
+    function hasRole(roles) {
+      return getUserData().role in roles;
+    }
+    
+    function belongsToSameBusiness(businessId) {
+      return getBusinessId() == businessId;
+    }
+    
+    function isOwnerOrManager(userId) {
+      return request.auth.uid == userId || isAdmin() || isHR();
+    }
+    
+    function canAccessUser(userId) {
+      let userData = getUserData();
+      return request.auth.uid == userId || 
+             userData.role in ['admin', 'hr'] ||
+             (userData.role == 'manager' && userId in userData.subordinates);
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == userId || 
+         belongsToSameBusiness(resource.data.businessId));
+      
+      allow create: if isAuthenticated() && hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == userId || hasRole(['admin', 'hr'])) &&
+        belongsToSameBusiness(resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Businesses collection
+    match /businesses/{businessId} {
+      allow read: if isAuthenticated() && belongsToSameBusiness(businessId);
+      
+      allow create: if isAuthenticated();
+      
+      allow update: if isAuthenticated() && 
+        belongsToSameBusiness(businessId) && 
+        hasRole(['admin']);
+      
+      allow delete: if false; // Businesses can't be deleted via client
+    }
+    
+    // Departments collection
+    match /departments/{departmentId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId);
+      
+      allow create, update: if isAuthenticated() && 
+        hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Evaluations collection
+    match /evaluations/{evaluationId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        (hasRole(['admin', 'hr']) || 
+         request.auth.uid == resource.data.employeeId ||
+         request.auth.uid == resource.data.evaluatorId ||
+         (isManager() && resource.data.employeeId in getUserData().subordinates));
+      
+      allow create: if isAuthenticated() && 
+        hasRole(['admin', 'hr', 'manager']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow update: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        (hasRole(['admin', 'hr']) ||
+         request.auth.uid == resource.data.evaluatorId ||
+         (resource.data.workflow.status == 'draft' && 
+          request.auth.uid == resource.data.employeeId));
+      
+      allow delete: if isAuthenticated() && hasRole(['admin']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Evaluation Templates collection
+    match /evaluationTemplates/{templateId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId);
+      
+      allow create, update: if isAuthenticated() && 
+        hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Organization Chart collection (if needed as separate collection)
+    match /orgChart/{businessId} {
+      allow read, write: if isAuthenticated() && 
+        belongsToSameBusiness(businessId) &&
+        hasRole(['admin', 'hr']);
+    }
+    
+    // Bonus Calculations collection
+    match /bonusCalculations/{calculationId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        hasRole(['admin', 'hr', 'manager']);
+      
+      allow create, update: if isAuthenticated() && 
+        hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+      
+      allow create: if false; // Only created by Cloud Functions
+      
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId &&
+        // Only allow updating read status and similar fields
+        !('businessId' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('userId' in request.resource.data.diff(resource.data).affectedKeys());
+      
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Reports collection (aggregated data)
+    match /reports/{reportId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        hasRole(['admin', 'hr']);
+      
+      allow create, update, delete: if false; // Only managed by Cloud Functions
+    }
+    
+    // Settings collection
+    match /settings/{businessId} {
+      allow read: if isAuthenticated() && belongsToSameBusiness(businessId);
+      
+      allow create, update: if isAuthenticated() && 
+        belongsToSameBusiness(businessId) && 
+        hasRole(['admin']);
+      
+      allow delete: if false; // Settings can't be deleted
+    }
+  }
+}
