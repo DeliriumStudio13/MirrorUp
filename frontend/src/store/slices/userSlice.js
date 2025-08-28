@@ -4,8 +4,7 @@ import {
   collection, 
   getDocs, 
   query, 
-  where, 
-  orderBy
+  where
 } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -151,6 +150,17 @@ export const createUser = createAsyncThunk(
 
       console.log('User document created in Firestore');
 
+      // Update department employee count if department is assigned
+      if (userData.department) {
+        const { doc: firestoreDoc, updateDoc, increment } = await import('firebase/firestore');
+        const departmentRef = firestoreDoc(db, 'departments', userData.department);
+        await updateDoc(departmentRef, {
+          employeeCount: increment(1),
+          updatedAt: serverTimestamp()
+        });
+        console.log('Department employee count updated');
+      }
+
       // Clean up secondary app
       const { deleteApp } = await import('firebase/app');
       await deleteApp(secondaryApp);
@@ -186,8 +196,15 @@ export const createUser = createAsyncThunk(
 
 export const updateUser = createAsyncThunk(
   'users/updateUser',
-  async ({ userId, userData, businessId }, { rejectWithValue }) => {
+  async ({ userId, userData, businessId, currentUser }, { rejectWithValue }) => {
     try {
+      // Get current user data to check if department changed
+      const oldUserResult = await databaseService.getById('users', userId);
+      const oldUser = oldUserResult.success ? oldUserResult.data : null;
+      
+      const oldDepartment = oldUser?.employeeInfo?.department;
+      const newDepartment = userData.department || null;
+      
       // Update user data in Firestore
       const updateData = {
         'profile.firstName': userData.firstName,
@@ -195,13 +212,39 @@ export const updateUser = createAsyncThunk(
         'profile.email': userData.email,
         'profile.phone': userData.phone || null,
         role: userData.role,
-        'employeeInfo.department': userData.department || null,
+        'employeeInfo.department': newDepartment,
         'employeeInfo.position': userData.position,
         isActive: userData.isActive,
         updatedAt: databaseService.serverTimestamp()
       };
 
       await databaseService.update('users', userId, updateData);
+      
+      // Handle department count changes
+      if (oldDepartment !== newDepartment) {
+        const { doc: firestoreDoc, updateDoc, increment, serverTimestamp } = await import('firebase/firestore');
+        const { db } = await import('../../firebase/config');
+        
+        // Decrease count from old department
+        if (oldDepartment) {
+          const oldDeptRef = firestoreDoc(db, 'departments', oldDepartment);
+          await updateDoc(oldDeptRef, {
+            employeeCount: increment(-1),
+            updatedAt: serverTimestamp()
+          });
+          console.log('Decreased employee count in old department:', oldDepartment);
+        }
+        
+        // Increase count in new department
+        if (newDepartment) {
+          const newDeptRef = firestoreDoc(db, 'departments', newDepartment);
+          await updateDoc(newDeptRef, {
+            employeeCount: increment(1),
+            updatedAt: serverTimestamp()
+          });
+          console.log('Increased employee count in new department:', newDepartment);
+        }
+      }
       
       // Return updated user data
       const updatedResult = await databaseService.getById('users', userId);
@@ -229,6 +272,63 @@ export const deleteUser = createAsyncThunk(
       return userId;
     } catch (error) {
       return rejectWithValue(error.message || 'Failed to delete user');
+    }
+  }
+);
+
+// Utility function to fix department employee counts
+export const fixDepartmentCounts = createAsyncThunk(
+  'users/fixDepartmentCounts',
+  async (businessId, { rejectWithValue }) => {
+    try {
+      console.log('🔧 Starting department count fix...');
+      
+      const { collection, getDocs, query, where, doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('../../firebase/config');
+      
+      // Get all users for this business
+      const usersRef = collection(db, 'users');
+      const usersQuery = query(usersRef, where('businessId', '==', businessId));
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      // Get all departments for this business
+      const departmentsRef = collection(db, 'departments');
+      const departmentsQuery = query(departmentsRef, where('businessId', '==', businessId));
+      const departmentsSnapshot = await getDocs(departmentsQuery);
+      
+      // Count employees per department
+      const departmentCounts = {};
+      
+      // Initialize all departments with 0 count
+      departmentsSnapshot.docs.forEach(deptDoc => {
+        departmentCounts[deptDoc.id] = 0;
+      });
+      
+      // Count actual employee assignments
+      usersSnapshot.docs.forEach(userDoc => {
+        const userData = userDoc.data();
+        const departmentId = userData.employeeInfo?.department;
+        if (departmentId && departmentCounts.hasOwnProperty(departmentId)) {
+          departmentCounts[departmentId]++;
+        }
+      });
+      
+      // Update each department's employee count
+      const updatePromises = Object.entries(departmentCounts).map(([deptId, count]) => {
+        const deptRef = doc(db, 'departments', deptId);
+        return updateDoc(deptRef, {
+          employeeCount: count,
+          updatedAt: serverTimestamp()
+        });
+      });
+      
+      await Promise.all(updatePromises);
+      
+      console.log('🔧 Department counts fixed:', departmentCounts);
+      return departmentCounts;
+    } catch (error) {
+      console.error('Error fixing department counts:', error);
+      return rejectWithValue(error.message);
     }
   }
 );

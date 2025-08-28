@@ -57,6 +57,8 @@ const OrganizationChartPage = () => {
         return { icon: '🔑', label: 'Admin', color: 'text-red-600 bg-red-50' };
       case 'hr':
         return { icon: '🏢', label: 'HR', color: 'text-blue-600 bg-blue-50' };
+      case 'head-manager':
+        return { icon: '👑', label: 'Head Manager', color: 'text-purple-600 bg-purple-50' };
       case 'manager':
         return { icon: '👥', label: 'Manager', color: 'text-green-600 bg-green-50' };
       case 'supervisor':
@@ -114,11 +116,12 @@ const OrganizationChartPage = () => {
     const childDepartments = getChildDepartments(department.id);
     
     // Organize users by hierarchy
+    const admins = getUsersByRole(departmentUsers, 'admin');
+    const hr = getUsersByRole(departmentUsers, 'hr');
+    const headManagers = getUsersByRole(departmentUsers, 'head-manager');
     const managers = getUsersByRole(departmentUsers, 'manager');
     const supervisors = getUsersByRole(departmentUsers, 'supervisor');
     const employees = getUsersByRole(departmentUsers, 'employee');
-    const hr = getUsersByRole(departmentUsers, 'hr');
-    const admins = getUsersByRole(departmentUsers, 'admin');
 
     return (
       <div className={`border rounded-lg bg-white shadow-sm ${level > 0 ? 'ml-8 mt-4 border-l-4 border-l-blue-300' : ''}`}>
@@ -196,6 +199,19 @@ const OrganizationChartPage = () => {
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {hr.map(user => <UserCard key={user.id} user={user} />)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Head Managers */}
+                {headManagers.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-purple-700 mb-2 flex items-center">
+                      <span className="mr-2">👑</span>
+                      Head Managers ({headManagers.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {headManagers.map(user => <UserCard key={user.id} user={user} />)}
                     </div>
                   </div>
                 )}
@@ -339,7 +355,11 @@ const OrganizationChartPage = () => {
             <div className="ml-4">
               <div className="text-sm font-medium text-gray-500">Managers</div>
               <div className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.role === 'manager').length}
+                {users.filter(u => u.role === 'manager' || u.role === 'head-manager').length}
+              </div>
+              <div className="text-xs text-gray-400">
+                {users.filter(u => u.role === 'head-manager').length} Head Managers, {' '}
+                {users.filter(u => u.role === 'manager').length} Managers
               </div>
             </div>
           </div>

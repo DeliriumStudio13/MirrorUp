@@ -16,7 +16,13 @@ import {
   ChartBarIcon,
   CogIcon,
   CurrencyDollarIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  DocumentCheckIcon,
+  StarIcon,
+  TrophyIcon,
+  AcademicCapIcon,
+  PlusIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 const Sidebar = () => {
@@ -40,8 +46,8 @@ const Sidebar = () => {
       }
     ];
 
-    // Role-specific navigation
-    const adminHrItems = [
+    // Admin & HR Items (Full System Access)
+    const systemManagementItems = [
       {
         name: 'Users',
         href: '/users',
@@ -53,10 +59,7 @@ const Sidebar = () => {
         href: '/departments',
         icon: BuildingOfficeIcon,
         current: location.pathname.startsWith('/departments')
-      }
-    ];
-
-    const managerItems = [
+      },
       {
         name: 'Organization Chart',
         href: '/organization-chart',
@@ -65,12 +68,114 @@ const Sidebar = () => {
       }
     ];
 
-    const evaluationItems = [
+    const templateManagementItems = [
       {
-        name: 'Evaluations',
-        href: '/evaluations',
+        name: 'Evaluation Templates',
+        href: '/evaluation-templates',
         icon: ClipboardDocumentListIcon,
-        current: location.pathname.startsWith('/evaluations')
+        current: location.pathname.startsWith('/evaluation-templates')
+      }
+    ];
+
+    // Manager Items (Evaluating Others + Being Evaluated)
+    const managerEvaluationItems = [
+      {
+        name: 'My Team',
+        href: '/my-team',
+        icon: UserGroupIcon,
+        current: location.pathname.startsWith('/my-team')
+      },
+      {
+        name: 'Assign Evaluations',
+        href: '/assign-evaluations',
+        icon: PlusIcon,
+        current: location.pathname.startsWith('/assign-evaluations')
+      },
+      {
+        name: 'Review Evaluations',
+        href: '/review-evaluations',
+        icon: DocumentCheckIcon,
+        current: location.pathname.startsWith('/review-evaluations')
+      },
+      {
+        name: 'My Evaluations',
+        href: '/my-evaluations',
+        icon: StarIcon,
+        current: location.pathname.startsWith('/my-evaluations')
+      }
+    ];
+
+    // Supervisor Items (Similar to Manager but Smaller Scope)
+    const supervisorEvaluationItems = [
+      {
+        name: 'My Team',
+        href: '/my-team',
+        icon: UserGroupIcon,
+        current: location.pathname.startsWith('/my-team')
+      },
+      {
+        name: 'Assign Evaluations',
+        href: '/assign-evaluations',
+        icon: PlusIcon,
+        current: location.pathname.startsWith('/assign-evaluations')
+      },
+      {
+        name: 'Review Evaluations',
+        href: '/review-evaluations',
+        icon: DocumentCheckIcon,
+        current: location.pathname.startsWith('/review-evaluations')
+      },
+      {
+        name: 'My Evaluations',
+        href: '/my-evaluations',
+        icon: StarIcon,
+        current: location.pathname.startsWith('/my-evaluations')
+      }
+    ];
+
+    // Employee Items (Individual Focus)
+    const employeeEvaluationItems = [
+      {
+        name: 'My Evaluations',
+        href: '/my-evaluations',
+        icon: StarIcon,
+        current: location.pathname.startsWith('/my-evaluations')
+      },
+      {
+        name: 'Pending Tasks',
+        href: '/pending-evaluations',
+        icon: ClockIcon,
+        current: location.pathname.startsWith('/pending-evaluations')
+      },
+      {
+        name: 'My Goals & Targets',
+        href: '/my-goals',
+        icon: TrophyIcon,
+        current: location.pathname.startsWith('/my-goals')
+      },
+      {
+        name: 'Performance History',
+        href: '/performance-history',
+        icon: AcademicCapIcon,
+        current: location.pathname.startsWith('/performance-history')
+      }
+    ];
+
+    const reportItems = [
+      {
+        name: 'Team Performance',
+        href: '/team-performance',
+        icon: ChartBarIcon,
+        current: location.pathname.startsWith('/team-performance')
+      }
+    ];
+
+    const systemReportItems = [
+      {
+        name: 'System Analytics',
+        href: '/analytics',
+        icon: ChartBarIcon,
+        current: location.pathname.startsWith('/analytics')
       }
     ];
 
@@ -83,12 +188,12 @@ const Sidebar = () => {
       }
     ];
 
-    const reportItems = [
+    const bonusAllocationItems = [
       {
-        name: 'Analytics',
-        href: '/analytics',
-        icon: ChartBarIcon,
-        current: location.pathname.startsWith('/analytics')
+        name: 'Bonus Allocation',
+        href: '/bonus-allocation',
+        icon: CurrencyDollarIcon,
+        current: location.pathname.startsWith('/bonus-allocation')
       }
     ];
 
@@ -105,14 +210,54 @@ const Sidebar = () => {
     let items = [...baseItems];
 
     if (user?.role === 'admin') {
-      items = [...items, ...adminHrItems, ...managerItems, ...evaluationItems, ...bonusItems, ...reportItems, ...settingsItems];
+      // Admin has full system access
+      items = [
+        ...items, 
+        ...systemManagementItems, 
+        ...templateManagementItems, 
+        ...systemReportItems, 
+        ...bonusItems, 
+        ...settingsItems
+      ];
     } else if (user?.role === 'hr') {
-      items = [...items, ...adminHrItems, ...managerItems, ...evaluationItems, ...bonusItems, ...reportItems];
+      // HR has system management but limited settings
+      items = [
+        ...items, 
+        ...systemManagementItems, 
+        ...templateManagementItems, 
+        ...systemReportItems, 
+        ...bonusItems
+      ];
     } else if (user?.role === 'manager') {
-      items = [...items, ...managerItems, ...evaluationItems, ...reportItems];
+      // Manager has dual role: evaluate others + be evaluated
+      items = [
+        ...items, 
+        ...managerEvaluationItems, 
+        ...reportItems
+      ];
+      
+      // Add bonus allocation for head managers only
+      if (user?.isHeadManager === true) {
+        items = [...items, ...bonusAllocationItems];
+      }
+    } else if (user?.role === 'head-manager') {
+      // Head Manager has all manager privileges plus bonus allocation
+      items = [
+        ...items, 
+        ...managerEvaluationItems, 
+        ...reportItems,
+        ...bonusAllocationItems
+      ];
+    } else if (user?.role === 'supervisor') {
+      // Supervisor has dual role: evaluate employees + be evaluated by manager
+      items = [
+        ...items, 
+        ...supervisorEvaluationItems, 
+        ...reportItems
+      ];
     } else {
-      // Employee
-      items = [...items, ...evaluationItems];
+      // Employee: individual focus
+      items = [...items, ...employeeEvaluationItems];
     }
 
     return items;

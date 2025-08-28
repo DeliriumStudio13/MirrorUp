@@ -22,6 +22,23 @@ import { UsersPage } from './pages/users';
 import { DepartmentsPage } from './pages/departments';
 // Organization Chart pages
 import { OrganizationChartPage } from './pages/organization';
+import { EvaluationTemplatesPage } from './pages/evaluations';
+
+// Hierarchical Evaluation System pages
+import { 
+  MyTeamPage,
+  AssignEvaluationsPage,
+  ReviewEvaluationsPage,
+  EvaluationReviewPage,
+  MyEvaluationsPage,
+  MyEvaluationResultsPage,
+  EvaluationCompletePage,
+  PendingEvaluationsPage,
+  MyGoalsPage,
+  PerformanceHistoryPage,
+  TeamPerformancePage,
+  BonusAllocationPage
+} from './pages/evaluations';
 
 // TODO: Create these pages
 // import UserDetailsPage from './pages/users/UserDetailsPage';
@@ -151,6 +168,134 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <OrganizationChartPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Evaluation Templates */}
+            <Route path="/evaluation-templates" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EvaluationTemplatesPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* Hierarchical Evaluation System Routes */}
+            
+            {/* Manager/Supervisor Routes */}
+            <Route path="/my-team" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <MyTeamPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/assign-evaluations" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AssignEvaluationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/review-evaluations" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ReviewEvaluationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/review-evaluations/:evaluationId" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EvaluationReviewPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* All User Types - My Evaluations */}
+            <Route path="/my-evaluations" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <MyEvaluationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/my-evaluation-results/:evaluationId" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <MyEvaluationResultsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/my-evaluations/:evaluationId" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EvaluationCompletePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/evaluation-complete/:evaluationId" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EvaluationCompletePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/evaluation-review/:evaluationId" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EvaluationReviewPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Employee Specific Routes */}
+            <Route path="/pending-evaluations" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <PendingEvaluationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/my-goals" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <MyGoalsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/performance-history" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <PerformanceHistoryPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Team Performance Routes */}
+            <Route path="/team-performance" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TeamPerformancePage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Bonus Allocation Routes */}
+            <Route path="/bonus-allocation" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <BonusAllocationPage />
                 </DashboardLayout>
               </ProtectedRoute>
             } />

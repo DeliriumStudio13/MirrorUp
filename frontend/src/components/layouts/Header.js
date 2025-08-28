@@ -5,6 +5,9 @@ import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import classNames from 'classnames';
 
+// Utils
+import { formatDate } from '../../utils/dateUtils';
+
 // Redux
 import { logout, selectUser, selectBusinessData } from '../../store/slices/authSlice';
 import { toggleSidebar, selectNotifications, selectUnreadNotifications } from '../../store/slices/uiSlice';
@@ -147,7 +150,7 @@ const Header = () => {
                                 {notification.message}
                               </div>
                               <div className="text-xs text-gray-400 mt-1">
-                                {new Date(notification.timestamp).toLocaleDateString()}
+                                {formatDate(notification.timestamp)}
                               </div>
                             </div>
                           )}

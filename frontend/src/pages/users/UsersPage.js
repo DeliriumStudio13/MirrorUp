@@ -87,6 +87,7 @@ const UsersPage = () => {
     switch (role) {
       case 'admin': return 'bg-red-100 text-red-800';
       case 'hr': return 'bg-blue-100 text-blue-800';
+      case 'head-manager': return 'bg-purple-100 text-purple-800';
       case 'manager': return 'bg-green-100 text-green-800';
       case 'supervisor': return 'bg-yellow-100 text-yellow-800';
       case 'employee': return 'bg-gray-100 text-gray-800';
@@ -137,6 +138,7 @@ const UsersPage = () => {
             <option value="all">All Roles</option>
             <option value="admin">Admin</option>
             <option value="hr">HR</option>
+            <option value="head-manager">Head Manager</option>
             <option value="manager">Manager</option>
             <option value="supervisor">Supervisor</option>
             <option value="employee">Employee</option>
@@ -294,6 +296,7 @@ const UsersPage = () => {
           onClose={() => setIsAddModalOpen(false)}
           departments={departments}
           businessId={currentUser.businessId}
+          users={users}
         />
       )}
       
@@ -314,6 +317,7 @@ const UsersPage = () => {
           user={selectedUser}
           departments={departments}
           businessId={currentUser.businessId}
+          users={users}
         />
       )}
     </div>
@@ -321,7 +325,7 @@ const UsersPage = () => {
 };
 
 // Add User Modal Component
-const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
+const AddUserModal = ({ isOpen, onClose, departments, businessId, users }) => {
   const dispatch = useDispatch();
   
   // Fetch departments when modal opens
@@ -344,7 +348,8 @@ const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
     department: '',
     position: '',
     phone: '',
-    hireDate: new Date().toISOString().split('T')[0]
+    hireDate: new Date().toISOString().split('T')[0],
+    managerId: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -368,7 +373,8 @@ const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
         department: '',
         position: '',
         phone: '',
-        hireDate: new Date().toISOString().split('T')[0]
+        hireDate: new Date().toISOString().split('T')[0],
+        managerId: ''
       });
     } catch (error) {
       alert('Failed to create user: ' + error);
@@ -427,6 +433,7 @@ const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
               <option value="employee">👤 Employee</option>
               <option value="supervisor">👷 Supervisor</option>
               <option value="manager">👥 Manager</option>
+              <option value="head-manager">👑 Head Manager</option>
               <option value="hr">🏢 HR</option>
               <option value="admin">🔑 Admin</option>
             </select>
@@ -450,6 +457,30 @@ const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
               }
             </select>
           </div>
+        </div>
+
+        {/* Manager Selection */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Reports To (Manager)</label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            value={formData.managerId}
+            onChange={(e) => setFormData(prev => ({ ...prev, managerId: e.target.value }))}
+          >
+            <option value="">No Manager (Top Level)</option>
+            {users && users.length > 0 ? 
+              users
+                .filter(u => ['admin', 'hr', 'manager', 'head-manager', 'supervisor'].includes(u.role))
+                .filter(u => formData.department ? u.employeeInfo.department === formData.department : true)
+                .map(manager => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.profile.firstName} {manager.profile.lastName} ({manager.role})
+                  </option>
+                )) : 
+              <option disabled>No managers found</option>
+            }
+          </select>
+          <p className="text-xs text-gray-500">Select who this person reports to</p>
         </div>
 
           <Input
@@ -495,7 +526,7 @@ const AddUserModal = ({ isOpen, onClose, departments, businessId }) => {
 };
 
 // Edit User Modal Component  
-const EditUserModal = ({ isOpen, onClose, user, departments, businessId }) => {
+const EditUserModal = ({ isOpen, onClose, user, departments, businessId, users }) => {
   const dispatch = useDispatch();
   const [formData, setFormData] = useState({
     firstName: user.profile.firstName,
@@ -505,7 +536,8 @@ const EditUserModal = ({ isOpen, onClose, user, departments, businessId }) => {
     department: user.employeeInfo.department || '',
     position: user.employeeInfo.position,
     phone: user.profile.phone || '',
-    isActive: user.isActive
+    isActive: user.isActive,
+    managerId: user.employeeInfo.managerId || ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -569,6 +601,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, businessId }) => {
               <option value="employee">👤 Employee</option>
               <option value="supervisor">👷 Supervisor</option>
               <option value="manager">👥 Manager</option>
+              <option value="head-manager">👑 Head Manager</option>
               <option value="hr">🏢 HR</option>
               <option value="admin">🔑 Admin</option>
             </select>
@@ -592,6 +625,31 @@ const EditUserModal = ({ isOpen, onClose, user, departments, businessId }) => {
               }
             </select>
           </div>
+        </div>
+
+        {/* Manager Selection */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Reports To (Manager)</label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            value={formData.managerId}
+            onChange={(e) => setFormData(prev => ({ ...prev, managerId: e.target.value }))}
+          >
+            <option value="">No Manager (Top Level)</option>
+            {users && users.length > 0 ? 
+              users
+                .filter(u => ['admin', 'hr', 'manager', 'head-manager', 'supervisor'].includes(u.role))
+                .filter(u => u.id !== user.id) // Don't allow self-reporting
+                .filter(u => formData.department ? u.employeeInfo.department === formData.department : true)
+                .map(manager => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.profile.firstName} {manager.profile.lastName} ({manager.role})
+                  </option>
+                )) : 
+              <option disabled>No managers found</option>
+            }
+          </select>
+          <p className="text-xs text-gray-500">Select who this person reports to</p>
         </div>
 
         <Input

@@ -19,13 +19,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Firebase configuration for MirrorUp project
 const firebaseConfig = {
-  apiKey: "AIzaSyD8ACB8656g7lSdMA5h4nU9bj37hRaMjGQ",
-  authDomain: "mirrorup-e71a0.firebaseapp.com",
-  projectId: "mirrorup-e71a0",
-  storageBucket: "mirrorup-e71a0.firebasestorage.app",
-  messagingSenderId: "852717548637",
-  appId: "1:852717548637:web:bf2e1aaa2a0615ebbc89b4",
-  measurementId: "G-GE20LY3H3H"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyD8ACB8656g7lSdMA5h4nU9bj37hRaMjGQ",
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "mirrorup-e71a0.firebaseapp.com",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "mirrorup-e71a0",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "mirrorup-e71a0.firebasestorage.app",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "852717548637",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:852717548637:web:bf2e1aaa2a0615ebbc89b4",
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-GE20LY3H3H"
 };
 
 // Validate required config

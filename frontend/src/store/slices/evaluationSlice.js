@@ -160,6 +160,31 @@ export const deleteEvaluation = createAsyncThunk(
   }
 );
 
+export const saveEvaluationProgress = createAsyncThunk(
+  'evaluations/saveEvaluationProgress',
+  async ({ evaluationId, responses }, { rejectWithValue }) => {
+    try {
+      const evaluationRef = doc(db, 'evaluations', evaluationId);
+      
+      await updateDoc(evaluationRef, {
+        responses: {
+          selfAssessment: {
+            ...responses,
+            lastSavedAt: new Date().toISOString()
+          }
+        },
+        status: 'in-progress',
+        updatedAt: serverTimestamp()
+      });
+
+      const updatedDoc = await getDoc(evaluationRef);
+      return { id: updatedDoc.id, ...updatedDoc.data() };
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const submitEvaluation = createAsyncThunk(
   'evaluations/submitEvaluation',
   async ({ evaluationId, responses }, { rejectWithValue }) => {
@@ -181,27 +206,66 @@ export const submitEvaluation = createAsyncThunk(
   }
 );
 
+export const saveManagerReviewProgress = createAsyncThunk(
+  'evaluations/saveManagerReviewProgress',
+  async ({ evaluationId, managerReview }, { rejectWithValue }) => {
+    try {
+      const evaluationRef = doc(db, 'evaluations', evaluationId);
+      
+      await updateDoc(evaluationRef, {
+        managerReview: {
+          ...managerReview,
+          lastSavedAt: new Date().toISOString(),
+          inProgress: true
+        },
+        updatedAt: serverTimestamp()
+      });
+
+      const updatedDoc = await getDoc(evaluationRef);
+      return { id: updatedDoc.id, ...updatedDoc.data() };
+    } catch (error) {
+      console.error('Error saving manager review progress:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 // Async thunks for Templates
 export const fetchEvaluationTemplates = createAsyncThunk(
   'evaluations/fetchEvaluationTemplates',
   async ({ businessId, includeInactive = false }, { rejectWithValue }) => {
     try {
+      // Simplified query to work while indexes are building
       let templateQuery = query(
         collection(db, 'evaluationTemplates'),
-        where('businessId', '==', businessId),
-        orderBy('name')
+        where('businessId', '==', businessId)
       );
-
-      if (!includeInactive) {
-        templateQuery = query(templateQuery, where('isActive', '==', true));
-      }
+      
+      // We'll filter isActive in JavaScript temporarily
+      // Once indexes are ready, we can restore the orderBy('name') query
 
       const querySnapshot = await getDocs(templateQuery);
       const templates = [];
 
       querySnapshot.forEach((doc) => {
-        templates.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        
+        // Filter in JavaScript while indexes are building
+        if (!includeInactive && !data.isActive) {
+          return; // Skip inactive templates if not including them
+        }
+        
+        // Convert Firebase timestamps to Date objects for consistency
+        templates.push({ 
+          id: doc.id, 
+          ...data,
+          createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+          updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+        });
       });
+      
+      // Sort by name in JavaScript temporarily
+      templates.sort((a, b) => a.name.localeCompare(b.name));
 
       return templates;
     } catch (error) {
@@ -239,7 +303,13 @@ export const createEvaluationTemplate = createAsyncThunk(
       });
 
       const createdDoc = await getDoc(docRef);
-      return { id: createdDoc.id, ...createdDoc.data() };
+      const data = createdDoc.data();
+      return { 
+        id: createdDoc.id, 
+        ...data,
+        createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+        updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -271,10 +341,8 @@ export const deleteEvaluationTemplate = createAsyncThunk(
     try {
       const templateRef = doc(db, 'evaluationTemplates', templateId);
       
-      await updateDoc(templateRef, {
-        isActive: false,
-        updatedAt: serverTimestamp()
-      });
+      // Actually delete the document from Firestore permanently
+      await deleteDoc(templateRef);
 
       return templateId;
     } catch (error) {
@@ -415,6 +483,28 @@ const evaluationSlice = createSlice({
         }
       })
       
+      // Save Evaluation Progress
+      .addCase(saveEvaluationProgress.fulfilled, (state, action) => {
+        const index = state.evaluations.findIndex(evaluation => evaluation.id === action.payload.id);
+        if (index !== -1) {
+          state.evaluations[index] = action.payload;
+        }
+        if (state.selectedEvaluation && state.selectedEvaluation.id === action.payload.id) {
+          state.selectedEvaluation = action.payload;
+        }
+      })
+      
+      // Save Manager Review Progress
+      .addCase(saveManagerReviewProgress.fulfilled, (state, action) => {
+        const index = state.evaluations.findIndex(evaluation => evaluation.id === action.payload.id);
+        if (index !== -1) {
+          state.evaluations[index] = action.payload;
+        }
+        if (state.selectedEvaluation && state.selectedEvaluation.id === action.payload.id) {
+          state.selectedEvaluation = action.payload;
+        }
+      })
+      
       // Submit Evaluation
       .addCase(submitEvaluation.fulfilled, (state, action) => {
         const index = state.evaluations.findIndex(evaluation => evaluation.id === action.payload.id);
@@ -491,5 +581,64 @@ export const selectEvaluationsFilters = (state) => state.evaluations.filters;
 export const selectEvaluationsLoading = (state) => state.evaluations.isLoading;
 export const selectTemplatesLoading = (state) => state.evaluations.templatesLoading;
 export const selectEvaluationsError = (state) => state.evaluations.error;
+
+// Template migration utility
+export const fixTemplateQuestionTypes = createAsyncThunk(
+  'evaluations/fixTemplateQuestionTypes',
+  async (businessId, { rejectWithValue }) => {
+    try {
+      console.log('🔧 Starting template question type migration for business:', businessId);
+      
+      const templatesRef = collection(db, 'evaluationTemplates');
+      const q = query(templatesRef, where('businessId', '==', businessId));
+      const querySnapshot = await getDocs(q);
+      
+      let fixedCount = 0;
+      
+      for (const docSnapshot of querySnapshot.docs) {
+        const template = docSnapshot.data();
+        let needsUpdate = false;
+        
+        // Check and fix category questions
+        const updatedCategories = template.categories?.map(category => {
+          const updatedQuestions = category.questions?.map(question => {
+            if (!question.type || (question.type !== 'rating' && question.type !== 'dualRating' && question.type !== 'text')) {
+              console.log('🔧 Fixing question type for:', question.text);
+              needsUpdate = true;
+              return {
+                ...question,
+                type: 'dualRating' // Default to dualRating for consistency
+              };
+            }
+            return question;
+          }) || [];
+          
+          return {
+            ...category,
+            questions: updatedQuestions
+          };
+        }) || [];
+        
+        // If template needs update, save it
+        if (needsUpdate) {
+          console.log('🔧 Updating template:', template.name);
+          const templateRef = doc(db, 'evaluationTemplates', docSnapshot.id);
+          await updateDoc(templateRef, {
+            categories: updatedCategories,
+            updatedAt: serverTimestamp()
+          });
+          fixedCount++;
+        }
+      }
+      
+      console.log(`✅ Fixed ${fixedCount} templates with missing question types`);
+      return { fixedCount };
+      
+    } catch (error) {
+      console.error('❌ Error fixing template question types:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
 
 export default evaluationSlice.reducer;

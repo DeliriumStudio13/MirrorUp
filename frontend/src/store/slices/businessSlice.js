@@ -77,31 +77,9 @@ export const fetchRecentActivity = createAsyncThunk(
   'business/fetchRecentActivity',
   async ({ businessId, limit = 10 }, { rejectWithValue }) => {
     try {
-      // This would fetch recent activities from Firebase
-      // For now, return mock data
-      return [
-        {
-          id: '1',
-          type: 'evaluation_completed',
-          message: 'John Doe completed annual evaluation',
-          timestamp: new Date().toISOString(),
-          user: 'John Doe'
-        },
-        {
-          id: '2',
-          type: 'user_created',
-          message: 'New employee Jane Smith added',
-          timestamp: new Date(Date.now() - 86400000).toISOString(),
-          user: 'Admin'
-        },
-        {
-          id: '3',
-          type: 'evaluation_created',
-          message: 'Q4 evaluation cycle started',
-          timestamp: new Date(Date.now() - 172800000).toISOString(),
-          user: 'HR Manager'
-        }
-      ];
+      // TODO: Implement Firebase integration for recent activities
+      // Return empty array for now - will be implemented with real data
+      return [];
     } catch (error) {
       return rejectWithValue(error.message);
     }
