@@ -10,11 +10,11 @@ const Card = ({
   border = false
 }) => {
   const cardClasses = classNames(
-    'bg-white rounded-lg overflow-hidden',
+    'bg-white dark:bg-gray-800 rounded-lg overflow-hidden',
     {
-      'shadow-elevation-1': shadow,
-      'shadow-float': hover,
-      'border border-gray-200': border,
+      'shadow-elevation-1 dark:shadow-gray-900/20': shadow,
+      'shadow-float dark:shadow-gray-900/30': hover,
+      'border border-gray-200 dark:border-gray-700': border,
       'p-6': padding
     },
     className
@@ -39,12 +39,12 @@ const CardHeader = ({
       <div className="flex items-center justify-between">
         <div>
           {title && (
-            <h3 className="text-lg font-medium text-gray-900">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
               {title}
             </h3>
           )}
           {subtitle && (
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {subtitle}
             </p>
           )}

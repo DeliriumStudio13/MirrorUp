@@ -61,6 +61,12 @@ const Sidebar = () => {
         current: location.pathname.startsWith('/departments')
       },
       {
+        name: 'Assignments',
+        href: '/assignments',
+        icon: ClipboardDocumentListIcon,
+        current: location.pathname.startsWith('/assignments')
+      },
+      {
         name: 'Organization Chart',
         href: '/organization-chart',
         icon: UserGroupIcon,
@@ -272,39 +278,43 @@ const Sidebar = () => {
         'hidden lg:flex lg:flex-shrink-0',
         'transition-all duration-300 ease-in-out'
       )}>
-        <div className="flex flex-col w-64 bg-white border-r border-gray-200">
+        <div className="flex flex-col w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700">
           {/* Sidebar header */}
-          <div className="flex items-center justify-center h-16 flex-shrink-0 px-4 bg-primary-600">
+          <div className="flex items-center justify-center h-16 flex-shrink-0 px-4 bg-primary-600 dark:bg-primary-700">
             <Link to="/dashboard" className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-primary-600 font-bold text-lg">E</span>
+                <div className="h-10 w-10 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center shadow-lg">
+                  <svg className="h-6 w-6 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                    <path d="M2 17L12 22L22 17" />
+                    <path d="M2 12L12 17L22 12" />
+                  </svg>
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-white font-semibold text-lg">EvalSys</p>
+                <p className="text-white font-semibold text-xl tracking-wide">MirrorUp</p>
               </div>
             </Link>
           </div>
 
           {/* Navigation */}
-          <nav className="mt-5 flex-1 px-2 bg-white space-y-1 overflow-y-auto">
+          <nav className="mt-5 flex-1 px-2 bg-white dark:bg-gray-900 space-y-1 overflow-y-auto">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
                 className={classNames(
                   item.current
-                    ? 'bg-primary-100 text-primary-700 border-r-2 border-primary-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border-r-2 border-primary-700 dark:border-primary-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white',
                   'group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-200'
                 )}
               >
                 <item.icon
                   className={classNames(
                     item.current
-                      ? 'text-primary-500'
-                      : 'text-gray-400 group-hover:text-gray-500',
+                      ? 'text-primary-500 dark:text-primary-400'
+                      : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300',
                     'mr-3 flex-shrink-0 h-6 w-6 transition-colors duration-200'
                   )}
                   aria-hidden="true"
@@ -315,8 +325,8 @@ const Sidebar = () => {
           </nav>
 
           {/* User info */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-            <Link to="/profile" className="flex-shrink-0 w-full group block">
+          <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex-shrink-0 w-full">
               <div className="flex items-center">
                 <div>
                   <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
@@ -326,15 +336,15 @@ const Sidebar = () => {
                   </div>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     {user?.profile?.firstName} {user?.profile?.lastName}
                   </p>
-                  <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700 capitalize">
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize">
                     {user?.role}
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -345,13 +355,13 @@ const Sidebar = () => {
         sidebarOpen ? 'pointer-events-auto' : 'pointer-events-none'
       )}>
         <div className={classNames(
-          'fixed inset-0 bg-gray-600 bg-opacity-75',
+          'fixed inset-0 bg-gray-600 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80',
           sidebarOpen ? 'opacity-100' : 'opacity-0',
           'transition-opacity ease-linear duration-300'
         )} onClick={closeSidebar} />
 
         <div className={classNames(
-          'relative flex-1 flex flex-col max-w-xs w-full bg-white',
+          'relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-gray-900',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
           'transition-transform ease-in-out duration-300'
         )}>
@@ -390,12 +400,16 @@ const Sidebar = () => {
             <div className="flex items-center justify-center flex-shrink-0 px-4 mb-5">
               <Link to="/dashboard" className="flex items-center" onClick={closeSidebar}>
                 <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">E</span>
+                  <div className="h-10 w-10 bg-primary-600 dark:bg-primary-700 rounded-lg flex items-center justify-center shadow-lg">
+                    <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                      <path d="M2 17L12 22L22 17" />
+                      <path d="M2 12L12 17L22 12" />
+                    </svg>
                   </div>
                 </div>
                 <div className="ml-3">
-                  <p className="text-primary-600 font-semibold text-lg">EvalSys</p>
+                  <p className="text-primary-600 dark:text-primary-400 font-semibold text-xl tracking-wide">MirrorUp</p>
                 </div>
               </Link>
             </div>
@@ -409,16 +423,16 @@ const Sidebar = () => {
                   onClick={closeSidebar}
                   className={classNames(
                     item.current
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white',
                     'group flex items-center px-2 py-2 text-base font-medium rounded-md'
                   )}
                 >
                   <item.icon
                     className={classNames(
                       item.current
-                        ? 'text-primary-500'
-                        : 'text-gray-400 group-hover:text-gray-500',
+                        ? 'text-primary-500 dark:text-primary-400'
+                        : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300',
                       'mr-4 flex-shrink-0 h-6 w-6'
                     )}
                     aria-hidden="true"
@@ -430,12 +444,8 @@ const Sidebar = () => {
           </div>
 
           {/* Mobile user info */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-            <Link 
-              to="/profile" 
-              className="flex-shrink-0 group block w-full"
-              onClick={closeSidebar}
-            >
+          <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex-shrink-0 w-full">
               <div className="flex items-center">
                 <div>
                   <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
@@ -445,15 +455,15 @@ const Sidebar = () => {
                   </div>
                 </div>
                 <div className="ml-3">
-                  <p className="text-base font-medium text-gray-700 group-hover:text-gray-900">
+                  <p className="text-base font-medium text-gray-700 dark:text-gray-200">
                     {user?.profile?.firstName} {user?.profile?.lastName}
                   </p>
-                  <p className="text-sm font-medium text-gray-500 group-hover:text-gray-700 capitalize">
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 capitalize">
                     {user?.role}
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
           </div>
         </div>
       </div>

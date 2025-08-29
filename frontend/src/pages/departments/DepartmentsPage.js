@@ -12,11 +12,16 @@ import {
   selectDepartmentsError 
 } from '../../store/slices/departmentSlice';
 import { selectUser } from '../../store/slices/authSlice';
+import { 
+  fetchUsers,
+  selectUsers 
+} from '../../store/slices/userSlice';
 
 const DepartmentsPage = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectUser);
   const departments = useSelector(selectDepartments);
+  const users = useSelector(selectUsers);
   const loading = useSelector(selectDepartmentsLoading);
   const error = useSelector(selectDepartmentsError);
 
@@ -25,12 +30,20 @@ const DepartmentsPage = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
 
-  // Fetch departments on component mount
+  // Fetch departments and users on component mount
   useEffect(() => {
     if (currentUser?.businessId) {
       dispatch(fetchDepartments(currentUser.businessId));
+      dispatch(fetchUsers(currentUser.businessId));
     }
   }, [dispatch, currentUser?.businessId]);
+
+  // Helper function to get manager name
+  const getManagerName = (managerId) => {
+    if (!managerId) return 'Unassigned';
+    const manager = users.find(user => user.id === managerId);
+    return manager ? `${manager.profile.firstName} ${manager.profile.lastName}` : 'Unassigned';
+  };
 
   // Filter departments based on search
   const filteredDepartments = departments.filter(dept => 
@@ -118,7 +131,7 @@ const DepartmentsPage = () => {
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium text-gray-900">{department.name}</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">{department.name}</h3>
                 <Badge className={department.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
                   {department.isActive ? 'Active' : 'Inactive'}
                 </Badge>
@@ -127,7 +140,7 @@ const DepartmentsPage = () => {
                 <p className="text-sm text-gray-600 mt-1">{department.description}</p>
               )}
               <div className="flex items-center text-sm text-gray-500 mt-2 space-x-4">
-                <span>Manager: {department.manager?.name || 'Unassigned'}</span>
+                <span>Manager: {getManagerName(department.manager)}</span>
                 <span>Employees: {department.employeeCount || 0}</span>
                 {level === 0 && department.parentDepartment && (
                   <span className="flex items-center">
@@ -183,8 +196,8 @@ const DepartmentsPage = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Department Management</h1>
-          <p className="text-gray-600">Organize your company structure and reporting hierarchy</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Department Management</h1>
+          <p className="text-gray-600 dark:text-gray-300">Organize your company structure and reporting hierarchy</p>
         </div>
         <Button 
           onClick={handleAddDepartment}
@@ -219,7 +232,7 @@ const DepartmentsPage = () => {
         {hierarchicalDepartments.length === 0 && !loading && (
           <Card className="text-center py-12">
             <BuildingOfficeIcon className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No departments found</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No departments found</h3>
             <p className="mt-1 text-sm text-gray-500">
               {searchTerm 
                 ? 'Try adjusting your search.' 
@@ -269,6 +282,7 @@ const DepartmentsPage = () => {
 // Add Department Modal Component
 const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
   const dispatch = useDispatch();
+  const users = useSelector(selectUsers);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -335,16 +349,31 @@ const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
           label="Parent Department (Optional)"
           value={formData.parentDepartment}
           onChange={(e) => setFormData(prev => ({ ...prev, parentDepartment: e.target.value }))}
-        >
-          <option value="">-- No Parent (Root Department) --</option>
-                      {buildDepartmentTree(departments, null)
-            .filter(dept => dept.isActive) // Only show active departments
-            .map(dept => (
-              <option key={dept.id} value={dept.id}>
-                {dept.displayName}
-              </option>
-            ))}
-        </Select>
+          placeholder="-- No Parent (Root Department) --"
+          options={[
+            { value: '', label: '-- No Parent (Root Department) --' },
+            ...buildDepartmentTree(departments, null)
+              .filter(dept => dept.isActive) // Only show active departments
+              .map(dept => ({
+                value: dept.id,
+                label: dept.displayName
+              }))
+          ]}
+        />
+
+        <Select
+          label="Department Manager (Optional)"
+          value={formData.manager}
+          onChange={(e) => setFormData(prev => ({ ...prev, manager: e.target.value }))}
+          placeholder="-- No Manager Assigned --"
+          options={[
+            { value: '', label: '-- No Manager Assigned --' },
+            ...users.filter(user => user.role === 'head-manager').map(user => ({
+              value: user.id,
+              label: `${user.profile?.firstName || 'Unknown'} ${user.profile?.lastName || ''} - ${user.role}`
+            }))
+          ]}
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
@@ -438,6 +467,7 @@ const buildDepartmentTree = (departments, excludeId) => {
 // Edit Department Modal Component
 const EditDepartmentModal = ({ isOpen, onClose, department, departments, businessId }) => {
   const dispatch = useDispatch();
+  const users = useSelector(selectUsers);
   const [formData, setFormData] = useState({
     name: department.name,
     description: department.description || '',
@@ -518,6 +548,25 @@ const EditDepartmentModal = ({ isOpen, onClose, department, departments, busines
           </div>
         </div>
 
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Department Manager (Optional)</label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            value={formData.manager || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, manager: e.target.value }))}
+          >
+            <option value="">-- No Manager Assigned --</option>
+            {users && users.length > 0 ? 
+              users.filter(user => user.role === 'head-manager').map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.profile.firstName} {user.profile.lastName} - {user.role}
+                </option>
+              )) :
+              <option disabled>No head managers available</option>
+            }
+          </select>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Budget (Optional)"
@@ -545,7 +594,7 @@ const EditDepartmentModal = ({ isOpen, onClose, department, departments, busines
             onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
           />
-          <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+          <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900 dark:text-white">
             Active Department
           </label>
         </div>

@@ -64,9 +64,9 @@ const OrganizationChartPage = () => {
       case 'supervisor':
         return { icon: '👷', label: 'Supervisor', color: 'text-yellow-600 bg-yellow-50' };
       case 'employee':
-        return { icon: '👤', label: 'Employee', color: 'text-gray-600 bg-gray-50' };
+        return { icon: '👤', label: 'Employee', color: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800' };
       default:
-        return { icon: '👤', label: 'Employee', color: 'text-gray-600 bg-gray-50' };
+        return { icon: '👤', label: 'Employee', color: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800' };
     }
   };
 
@@ -83,7 +83,7 @@ const OrganizationChartPage = () => {
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-medium text-sm text-gray-900">
+            <div className="font-medium text-sm text-gray-900 dark:text-white">
               {user.profile.firstName} {user.profile.lastName}
             </div>
             <div className="text-xs text-gray-500">{user.employeeInfo.position}</div>
@@ -124,10 +124,10 @@ const OrganizationChartPage = () => {
     const employees = getUsersByRole(departmentUsers, 'employee');
 
     return (
-      <div className={`border rounded-lg bg-white shadow-sm ${level > 0 ? 'ml-8 mt-4 border-l-4 border-l-blue-300' : ''}`}>
+      <div className={`border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm ${level > 0 ? 'ml-8 mt-4 border-l-4 border-l-blue-300 dark:border-l-blue-500' : ''}`}>
         {/* Department Header */}
         <div
-          className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+          className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
           onClick={() => toggleDepartment(department.id)}
         >
           <div className="flex items-center space-x-3">
@@ -135,7 +135,7 @@ const OrganizationChartPage = () => {
             <div>
               <div className="flex items-center space-x-2">
                 {level > 0 && <span className="text-gray-400 text-sm">└─</span>}
-                <h3 className={`font-semibold ${level === 0 ? 'text-lg' : 'text-md'} text-gray-900`}>
+                <h3 className={`font-semibold ${level === 0 ? 'text-lg' : 'text-md'} text-gray-900 dark:text-white`}>
                   {department.name}
                 </h3>
                 {level > 0 && (
@@ -168,7 +168,7 @@ const OrganizationChartPage = () => {
 
         {/* Department Content */}
         {isExpanded && (
-          <div className="px-4 pb-4 border-t bg-gray-50">
+          <div className="px-4 pb-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <div className="pt-4">
               {/* Department Description */}
               {department.description && (
@@ -259,7 +259,7 @@ const OrganizationChartPage = () => {
                 {departmentUsers.length === 0 && childDepartments.length === 0 && (
                   <div className="text-center py-8">
                     <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No employees</h3>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No employees</h3>
                     <p className="mt-1 text-sm text-gray-500">
                       This department doesn't have any employees assigned yet.
                     </p>
@@ -272,7 +272,7 @@ const OrganizationChartPage = () => {
 
         {/* Child Departments */}
         {isExpanded && childDepartments.length > 0 && (
-          <div className="border-t bg-gray-50">
+          <div className="border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <div className="p-2">
               <h4 className="text-sm font-medium text-gray-700 mb-2 px-2">Sub-departments:</h4>
               {childDepartments.map(childDept => (
@@ -298,8 +298,8 @@ const OrganizationChartPage = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Organization Chart</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organization Chart</h1>
+          <p className="text-gray-600 dark:text-gray-300">
             Visual representation of your company's structure and hierarchy
           </p>
         </div>
@@ -328,7 +328,7 @@ const OrganizationChartPage = () => {
             </div>
             <div className="ml-4">
               <div className="text-sm font-medium text-gray-500">Departments</div>
-              <div className="text-2xl font-bold text-gray-900">{departments.length}</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{departments.length}</div>
             </div>
           </div>
         </Card>
@@ -340,7 +340,7 @@ const OrganizationChartPage = () => {
             </div>
             <div className="ml-4">
               <div className="text-sm font-medium text-gray-500">Total Employees</div>
-              <div className="text-2xl font-bold text-gray-900">{users.length}</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{users.length}</div>
             </div>
           </div>
         </Card>
@@ -354,7 +354,7 @@ const OrganizationChartPage = () => {
             </div>
             <div className="ml-4">
               <div className="text-sm font-medium text-gray-500">Managers</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {users.filter(u => u.role === 'manager' || u.role === 'head-manager').length}
               </div>
               <div className="text-xs text-gray-400">
@@ -374,7 +374,7 @@ const OrganizationChartPage = () => {
             </div>
             <div className="ml-4">
               <div className="text-sm font-medium text-gray-500">Supervisors</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {users.filter(u => u.role === 'supervisor').length}
               </div>
             </div>
@@ -393,7 +393,7 @@ const OrganizationChartPage = () => {
       {departments.length === 0 && (
         <Card className="text-center py-12">
           <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No departments</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No departments</h3>
           <p className="mt-1 text-sm text-gray-500">
             Get started by creating your first department.
           </p>

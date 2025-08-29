@@ -16,6 +16,7 @@ import Badge from '../../components/common/Badge';
 import { fetchUsers, selectUsers } from '../../store/slices/userSlice';
 import { fetchDepartments, selectDepartments } from '../../store/slices/departmentSlice';
 import { fetchEvaluations } from '../../store/slices/evaluationSlice';
+import { fetchBonusAssignments, selectBonusAssignmentsByAllocator } from '../../store/slices/assignmentSlice';
 import { formatDate } from '../../utils/dateUtils';
 import { db } from '../../firebase/config';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -26,6 +27,7 @@ const BonusAllocationPage = () => {
   const { user } = useSelector((state) => state.auth);
   const users = useSelector(selectUsers);
   const departments = useSelector(selectDepartments);
+  const bonusAssignments = useSelector((state) => selectBonusAssignmentsByAllocator(state, user?.uid || user?.id));
   
   // Local state for evaluations
   const [evaluations, setEvaluations] = useState([]);
@@ -40,9 +42,8 @@ const BonusAllocationPage = () => {
   const [bonusAllocations, setBonusAllocations] = useState({});
   const [budgetExceeded, setBudgetExceeded] = useState(false);
 
-  // Get user's department
-  const userDepartment = departments.find(dept => dept.id === user?.employeeInfo?.department);
-  const isHeadManager = user?.role === 'head-manager' || (user?.role === 'manager' && user?.isHeadManager === true);
+  // Check if user has bonus allocation permission (admin, hr, head-manager, or has assignments)
+  const hasPermission = ['admin', 'hr', 'head-manager'].includes(user?.role) || (bonusAssignments && bonusAssignments.length > 0);
 
   // Load existing bonus allocation from Firebase
   const loadExistingAllocation = useCallback(async () => {
@@ -70,10 +71,11 @@ const BonusAllocationPage = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        // Fetch users, departments, and evaluations
+        // Fetch users, departments, and bonus assignments
         await Promise.all([
           dispatch(fetchUsers(user?.businessId)),
-          dispatch(fetchDepartments(user?.businessId))
+          dispatch(fetchDepartments(user?.businessId)),
+          dispatch(fetchBonusAssignments(user?.businessId))
         ]);
         
         // Fetch evaluations with fallback to direct Firebase query
@@ -121,29 +123,61 @@ const BonusAllocationPage = () => {
       }
     };
 
-    if (user && isHeadManager) {
+    if (user?.businessId) {
       loadData();
     }
-  }, [dispatch, user, isHeadManager, loadExistingAllocation]);
+  }, [dispatch, user?.businessId, loadExistingAllocation]);
 
   // Process team members with their latest evaluation scores
   useEffect(() => {
-    if (!users.length || !userDepartment) return;
+    if (!users.length) return;
 
-    const departmentMembers = users.filter(member => {
-      // Don't include self
-      if (member.id === user?.id) return false;
+    // Filter team members based on role and assignments
+    let assignedMembers = [];
+    
+    if (['admin', 'hr'].includes(user?.role)) {
+      // Admin/HR can see all users
+      assignedMembers = users.filter(member => member.id !== user.uid && member.id !== user.id);
+    } else if (user?.role === 'head-manager') {
+      // Check multiple possible department field locations
+      const userDepartmentId = user?.employeeInfo?.department || user?.departmentId || user?.department;
+      // Head-managers see their department members AND any specific assignments
       
-      // Check if member is in the same department
-      if (member.employeeInfo?.department === userDepartment.id) {
-        // Include employees, supervisors, and managers (but not other head managers)
-        return ['employee', 'supervisor', 'manager'].includes(member.role);
+      const userDepartment = departments.find(dept => dept.id === userDepartmentId);
+      let departmentMembers = [];
+      
+      if (userDepartment) {
+        departmentMembers = users.filter(member => {
+          // Check multiple possible department field locations for team members
+          const memberDepartmentId = member.employeeInfo?.department || member.departmentId || member.department;
+          return memberDepartmentId === userDepartment.id && 
+                 member.id !== user.uid && member.id !== user.id;
+        });
+
       }
       
-      return false;
-    });
+      // Also include users from bonus assignments
+      let assignedUsers = [];
+      if (bonusAssignments && bonusAssignments.length > 0) {
+        const assignedUserIds = bonusAssignments.map(assignment => assignment.recipientId);
+        assignedUsers = users.filter(member => assignedUserIds.includes(member.id));
+      }
+      
+      // Combine both lists and remove duplicates
+      const allMembers = [...departmentMembers, ...assignedUsers];
+      assignedMembers = allMembers.filter((member, index, self) => 
+        index === self.findIndex(m => m.id === member.id)
+      );
+    } else if (bonusAssignments && bonusAssignments.length > 0) {
+      // Other roles with assignments can only see assigned users
+      const assignedUserIds = bonusAssignments.map(assignment => assignment.recipientId);
+      assignedMembers = users.filter(member => assignedUserIds.includes(member.id));
+    } else {
+      // For other roles without assignments, show empty array
+      assignedMembers = [];
+    }
 
-    const membersWithScores = departmentMembers.map(member => {
+    const membersWithScores = assignedMembers.map(member => {
       // Find latest completed evaluation
       const memberEvaluations = evaluations.filter(
         evaluation => evaluation.evaluateeId === member.id && evaluation.status === 'completed'
@@ -182,7 +216,7 @@ const BonusAllocationPage = () => {
     });
 
     setTeamMembers(membersWithScores);
-  }, [users, userDepartment, user?.id, bonusAllocations, evaluations]);
+  }, [users, bonusAssignments, bonusAllocations, evaluations, departments, user]);
 
   // Auto-calculate bonus allocations based on performance scores
   const calculateAutoAllocation = useCallback(() => {
@@ -192,7 +226,10 @@ const BonusAllocationPage = () => {
     }
     
     if (!teamMembers.length) {
-      alert('No team members found.');
+      const message = ['admin', 'hr', 'head-manager'].includes(user?.role) 
+        ? 'No team members found in your department for bonus allocation.'
+        : 'No team members assigned for bonus allocation. Please ask admin to create assignments.';
+      alert(message);
       return;
     }
 
@@ -326,18 +363,20 @@ const BonusAllocationPage = () => {
     return (salary * percentage) / 100;
   };
 
-  if (!isHeadManager) {
+  if (!hasPermission && !loading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <Card className="p-8 text-center">
           <ExclamationTriangleIcon className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Restricted</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Access Restricted</h2>
           <p className="text-gray-600">
-            Only department head managers can access the bonus allocation page.
+            You don't have permission to allocate bonuses. Ask your admin to create bonus assignments for you.
           </p>
-          <Link to="/dashboard" className="mt-4 inline-block">
-            <Button>Return to Dashboard</Button>
-          </Link>
+          <div className="mt-4">
+            <Link to="/dashboard" className="inline-block">
+              <Button variant="outline">Return to Dashboard</Button>
+            </Link>
+          </div>
         </Card>
       </div>
     );
@@ -355,16 +394,16 @@ const BonusAllocationPage = () => {
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Bonus Allocation</h1>
-        <p className="text-gray-600">
-          Allocate bonuses for {userDepartment?.name} department based on performance
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Bonus Allocation</h1>
+        <p className="text-gray-600 dark:text-gray-300">
+          Allocate bonuses for your assigned team members based on performance
         </p>
       </div>
 
       {/* Budget and KPI Settings */}
       <Card className="mb-6">
         <div className="p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Department Settings</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Department Settings</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Total Budget */}
@@ -414,7 +453,7 @@ const BonusAllocationPage = () => {
 
           {/* Budget Status */}
           {totalBudget && (
-            <div className="mt-4 p-4 rounded-lg bg-gray-50">
+            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-sm text-gray-600">Total Budget: </span>
@@ -449,7 +488,7 @@ const BonusAllocationPage = () => {
       <Card>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Team Bonus Allocation</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Team Bonus Allocation</h2>
             <div className="flex items-center space-x-4">
               {lastSaved && (
                 <div className="flex items-center text-sm text-gray-500">
@@ -469,12 +508,28 @@ const BonusAllocationPage = () => {
 
           {teamMembers.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">No team members found in your department.</p>
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-gray-100">
+                <BookmarkIcon className="h-6 w-6 text-gray-600" />
+              </div>
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No team members found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {['admin', 'hr', 'head-manager'].includes(user?.role) 
+                  ? 'No team members found in your department for bonus allocation.'
+                  : 'No team members have been assigned to you for bonus allocation.'
+                }
+              </p>
+              {!['admin', 'hr', 'head-manager'].includes(user?.role) && (
+                <div className="mt-6">
+                  <p className="text-sm text-gray-500">
+                    Ask your admin to create bonus assignments for you.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Employee
@@ -499,9 +554,9 @@ const BonusAllocationPage = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {teamMembers.map((member) => (
-                    <tr key={member.id} className="hover:bg-gray-50">
+                    <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       {/* Employee */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -513,7 +568,7 @@ const BonusAllocationPage = () => {
                             </div>
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
                               {member.profile?.firstName} {member.profile?.lastName}
                             </div>
                             <div className="text-sm text-gray-500">{member.email}</div>
@@ -531,9 +586,9 @@ const BonusAllocationPage = () => {
                       {/* Latest Score */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         {member.latestScore ? (
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-gray-900 dark:text-white">
                             <span className="font-medium">{member.latestScore}</span>
-                            <span className="text-gray-500">/{member.maxScore}</span>
+                            <span className="text-gray-500 dark:text-gray-400">/{member.maxScore}</span>
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400">No evaluation</span>
@@ -574,7 +629,7 @@ const BonusAllocationPage = () => {
 
                       {/* Bonus Amount */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
                           {getBonusAmount(member).toLocaleString()}
                         </span>
                       </td>

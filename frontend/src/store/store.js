@@ -5,6 +5,8 @@ import businessSlice from './slices/businessSlice';
 import userSlice from './slices/userSlice';
 import departmentSlice from './slices/departmentSlice';
 import evaluationSlice from './slices/evaluationSlice';
+import assignmentSlice from './slices/assignmentSlice';
+import themeSlice from './slices/themeSlice';
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +16,8 @@ export const store = configureStore({
     users: userSlice,
     departments: departmentSlice,
     evaluations: evaluationSlice,
+    assignments: assignmentSlice,
+    theme: themeSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -24,6 +28,11 @@ export const store = configureStore({
           'auth/login/fulfilled',
           'auth/register/fulfilled',
           'auth/updateProfile/fulfilled',
+          // Ignore assignment actions with Firebase timestamps
+          'assignments/fetchEvaluationAssignments/fulfilled',
+          'assignments/fetchBonusAssignments/fulfilled',
+          'assignments/createEvaluationAssignment/fulfilled',
+          'assignments/createBonusAssignment/fulfilled',
           // Ignore Firebase evaluation actions
           'evaluations/fetchEvaluationTemplates/fulfilled',
           'evaluations/fetchEvaluationTemplate/fulfilled',

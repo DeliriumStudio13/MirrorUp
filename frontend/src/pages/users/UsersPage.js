@@ -108,8 +108,8 @@ const UsersPage = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600">Manage employees and their roles in {businessData?.name}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
+          <p className="text-gray-600 dark:text-gray-300">Manage employees and their roles in {businessData?.name}</p>
         </div>
         <Button 
           onClick={handleAddUser}
@@ -171,7 +171,7 @@ const UsersPage = () => {
       <Card>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Employee
@@ -196,11 +196,11 @@ const UsersPage = () => {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredUsers.map((user) => {
                 const department = departments.find(d => d.id === user.employeeInfo.department);
                 return (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -211,7 +211,7 @@ const UsersPage = () => {
                           </div>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
                             {user.profile.firstName} {user.profile.lastName}
                           </div>
                           <div className="text-sm text-gray-500">
@@ -220,7 +220,7 @@ const UsersPage = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {user.employeeInfo.employeeId}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -228,10 +228,10 @@ const UsersPage = () => {
                         {user.role.toUpperCase()}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {department?.name || 'Unassigned'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {user.employeeInfo.position}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -269,7 +269,7 @@ const UsersPage = () => {
           {filteredUsers.length === 0 && (
             <div className="text-center py-12">
               <UserPlusIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No users found</h3>
               <p className="mt-1 text-sm text-gray-500">
                 {searchTerm || selectedRole !== 'all' || selectedDepartment !== 'all'
                   ? 'Try adjusting your search or filters.'
@@ -675,7 +675,7 @@ const EditUserModal = ({ isOpen, onClose, user, departments, businessId, users }
             onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
           />
-          <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+          <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900 dark:text-white">
             Active User
           </label>
         </div>

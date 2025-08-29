@@ -28,7 +28,7 @@ const TextArea = forwardRef(({
     'input',
     {
       'input-error': error,
-      'cursor-not-allowed bg-gray-50': disabled,
+      'cursor-not-allowed bg-gray-50 dark:bg-gray-800': disabled,
       'resize-none': !resize,
       'resize-y': resize
     },

@@ -25,7 +25,7 @@ const Select = forwardRef(({
     'input pr-10 appearance-none cursor-pointer',
     {
       'input-error': error,
-      'cursor-not-allowed bg-gray-50': disabled
+      'cursor-not-allowed bg-gray-50 dark:bg-gray-800': disabled
     },
     selectClassName
   );

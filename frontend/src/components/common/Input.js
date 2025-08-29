@@ -30,7 +30,7 @@ const Input = forwardRef(({
       'input-error': error,
       'pl-10': icon && iconPosition === 'left',
       'pr-10': (icon && iconPosition === 'right') || rightElement,
-      'cursor-not-allowed bg-gray-50': disabled
+      'cursor-not-allowed bg-gray-50 dark:bg-gray-800': disabled
     },
     inputClassName
   );

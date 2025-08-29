@@ -7,6 +7,11 @@ import { selectUser } from '../../store/slices/authSlice';
 import { fetchUsers } from '../../store/slices/userSlice';
 import { fetchEvaluationTemplates } from '../../store/slices/evaluationSlice';
 import { fetchDepartments } from '../../store/slices/departmentSlice';
+import {
+  fetchEvaluationAssignments,
+  selectEvaluationAssignments,
+  selectEvaluationAssignmentsByEvaluator
+} from '../../store/slices/assignmentSlice';
 
 // Firebase
 import { addDoc, collection } from 'firebase/firestore';
@@ -24,18 +29,7 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 
-// Helper function to check nested department relationships
-const isNestedSubordinate = (memberDept, targetDeptId, departments) => {
-  let currentDept = memberDept;
-  while (currentDept?.parentDepartment) {
-    const parentDept = departments?.find(d => d.id === currentDept.parentDepartment);
-    if (parentDept?.id === targetDeptId) {
-      return true;
-    }
-    currentDept = parentDept;
-  }
-  return false;
-};
+// Note: Using assignment-based filtering instead of department hierarchy
 
 const AssignEvaluationsPage = () => {
   const dispatch = useDispatch();
@@ -44,6 +38,8 @@ const AssignEvaluationsPage = () => {
   const { users, loading: usersLoading } = useSelector(state => state.users);
   const { templates, loading: templatesLoading } = useSelector(state => state.evaluations);
   const { departments } = useSelector(state => state.departments);
+  const evaluationAssignments = useSelector(selectEvaluationAssignments);
+  const myAssignments = useSelector(state => selectEvaluationAssignmentsByEvaluator(state, user?.uid || user?.id));
 
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -76,6 +72,9 @@ const AssignEvaluationsPage = () => {
         const departmentsResult = await dispatch(fetchDepartments(user?.businessId));
         console.log('🏢 Departments loaded:', departmentsResult.payload?.length || 0);
         
+        const assignmentsResult = await dispatch(fetchEvaluationAssignments(user?.businessId));
+        console.log('📋 Evaluation assignments loaded:', assignmentsResult.payload?.length || 0);
+        
       } catch (error) {
         console.error('❌ Error loading data:', error);
       }
@@ -94,101 +93,40 @@ const AssignEvaluationsPage = () => {
   }, [dispatch, searchParams, user?.businessId]);
 
   useEffect(() => {
-    console.log('🔍 AssignEvaluations: Filtering team members...');
-    console.log('📊 Current state:', {
+    console.log('🔍 AssignEvaluations: Filtering team members based on assignments...');
+    console.log('📊 Assignment state:', {
       users: users?.length || 0,
-      departments: departments?.length || 0,
+      myAssignmentsCount: myAssignments?.length || 0,
       userRole: user?.role,
-      userDepartment: user?.employeeInfo?.department
+      userId: user?.id
     });
     
-    if (users && user && departments) {
-      // Filter team members based on hierarchical relationships
-      let filteredUsers = [];
+    if (users && user && myAssignments) {
+      // Filter team members based on evaluation assignments
+      const assignedUserIds = myAssignments.map(assignment => assignment.evaluateeId);
       
-      if (user.role === 'manager' || user.role === 'head-manager') {
-        console.log('👔 Manager/Head Manager filtering logic...');
-        // Managers and Head Managers see all users in their department and subordinate departments
-        filteredUsers = users.filter(u => {
-          // Don't include self
-          if (u.id === user.id) return false;
-          
-          // Get user's department
-          const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
-          const memberDept = departments?.find(d => d.id === u.employeeInfo?.department);
-          
-          console.log(`🔍 Checking user: ${u.profile?.firstName} ${u.profile?.lastName}`, {
-            userRole: u.role,
-            memberDept: memberDept?.name,
-            userDept: userDept?.name
-          });
-          
-          if (!userDept || !memberDept) {
-            console.log('❌ Missing department data');
-            return false;
-          }
-          
-          // Include users in the same department with lower roles
-          if (u.employeeInfo?.department === user.employeeInfo?.department) {
-            const isLowerRole = ['supervisor', 'employee'].includes(u.role);
-            console.log(`✓ Same department, lower role? ${isLowerRole}`);
-            return isLowerRole;
-          }
-          
-          // Include users from subordinate departments (departments where this user's dept is parent)
-          if (memberDept.parentDepartment === userDept.id) {
-            const isLowerRole = ['supervisor', 'employee'].includes(u.role);
-            console.log(`✓ Subordinate department, lower role? ${isLowerRole}`);
-            return isLowerRole;
-          }
-          
-          // Include users from deeper nested departments
-          if (isNestedSubordinate(memberDept, userDept.id, departments)) {
-            const isLowerRole = ['supervisor', 'employee'].includes(u.role);
-            console.log(`✓ Nested subordinate department, lower role? ${isLowerRole}`);
-            return isLowerRole;
-          }
-          
-          console.log('❌ No hierarchical relationship found');
-          return false;
-        });
-      } else if (user.role === 'supervisor') {
-        console.log('👨‍💼 Supervisor filtering logic...');
-        // Supervisors see employees in their department and subordinate departments
-        filteredUsers = users.filter(u => {
-          // Don't include self
-          if (u.id === user.id) return false;
-          
-          // Get supervisor's department
-          const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
-          const memberDept = departments?.find(d => d.id === u.employeeInfo?.department);
-          
-          if (!userDept || !memberDept) return false;
-          
-          // Include employees in same department
-          if (u.employeeInfo?.department === user.employeeInfo?.department && u.role === 'employee') {
-            return true;
-          }
-          
-          // Include employees from subordinate departments
-          if (memberDept.parentDepartment === userDept.id && u.role === 'employee') {
-            return true;
-          }
-          
-          return false;
-        });
-      }
-
-      console.log(`✅ Filtered team members: ${filteredUsers.length}`);
-      filteredUsers.forEach(u => {
-        console.log(`   👤 ${u.profile?.firstName} ${u.profile?.lastName} (${u.role})`);
+      const filteredUsers = users.filter(u => {
+        // Don't include self
+        if (u.id === user.id) return false;
+        
+        // Include users who are assigned to be evaluated by the current user
+        return assignedUserIds.includes(u.id);
       });
       
+      console.log('✅ Assigned team members:', filteredUsers.length);
+      console.log('👥 Assigned members:', filteredUsers.map(u => ({
+        name: `${u.profile?.firstName} ${u.profile?.lastName}`,
+        role: u.role,
+        department: departments?.find(d => d.id === u.employeeInfo?.department)?.name
+      })));
+      
       setTeamMembers(filteredUsers);
-    } else {
-      console.log('❌ Missing required data for filtering');
+    } else if (users && user && myAssignments?.length === 0) {
+      // No assignments found - show empty list
+      console.log('❌ No evaluation assignments found for user');
+      setTeamMembers([]);
     }
-  }, [users, user, departments]);
+  }, [users, user, myAssignments, departments]);
 
   const getTemplateTypeBadgeColor = (type) => {
     switch (type) {
@@ -340,8 +278,8 @@ const AssignEvaluationsPage = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Assign Evaluations</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Assign Evaluations</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Select templates and assign evaluations to your team members
           </p>
         </div>
@@ -382,7 +320,7 @@ const AssignEvaluationsPage = () => {
         {/* Step 1: Select Template */}
         <Card>
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
               Step 1: Select Evaluation Template
             </h3>
             
@@ -412,7 +350,7 @@ const AssignEvaluationsPage = () => {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h4 className="text-sm font-medium text-gray-900">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
                           {template.name}
                         </h4>
                         <p className="text-xs text-gray-500 mt-1">
@@ -461,7 +399,7 @@ const AssignEvaluationsPage = () => {
         {/* Step 2: Select Team Members */}
         <Card>
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
               Step 2: Select Team Members
             </h3>
             
@@ -470,11 +408,20 @@ const AssignEvaluationsPage = () => {
                 <div className="text-center py-4">
                   <UserIcon className="mx-auto h-8 w-8 text-gray-400" />
                   <p className="mt-2 text-sm text-gray-500">
-                    {users && departments ? 'No team members available' : 'Loading team members...'}
+                    {users && myAssignments !== undefined ? 
+                      myAssignments.length === 0 ? 
+                        'No evaluation assignments found' : 
+                        'No team members available' 
+                      : 'Loading team members...'}
                   </p>
+                  {myAssignments?.length === 0 && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Ask your admin to create evaluation assignments in the Assignment Management page.
+                    </p>
+                  )}
                   {/* Debug info */}
                   <div className="mt-2 text-xs text-gray-400">
-                    Users: {users?.length || 0}, Departments: {departments?.length || 0}, Role: {user?.role}
+                    Users: {users?.length || 0}, Assignments: {myAssignments?.length || 0}, Role: {user?.role}
                   </div>
                 </div>
               ) : (
@@ -503,7 +450,7 @@ const AssignEvaluationsPage = () => {
                             </div>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
                               {member.profile?.firstName || member.firstName} {member.profile?.lastName || member.lastName}
                             </p>
                             <p className="text-xs text-gray-500">
@@ -559,8 +506,8 @@ const AssignEvaluationsPage = () => {
             />
           </div>
 
-          <div className="bg-gray-50 p-3 rounded-md">
-            <h4 className="text-sm font-medium text-gray-900 mb-2">Assignment Summary</h4>
+          <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Assignment Summary</h4>
             <div className="text-sm text-gray-600 space-y-1">
               <p><strong>Template:</strong> {selectedTemplate?.name}</p>
               <p><strong>Users:</strong> {selectedUsers.length} team members</p>
@@ -607,11 +554,11 @@ const AssignEvaluationsPage = () => {
         >
           <div className="space-y-6 max-h-96 overflow-y-auto">
             {/* Template Info */}
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-medium text-gray-900">{previewTemplate.name}</h3>
-                  <p className="text-sm text-gray-600">{previewTemplate.description}</p>
+                  <h3 className="font-medium text-gray-900 dark:text-white">{previewTemplate.name}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{previewTemplate.description}</p>
                 </div>
                 <div className="text-right">
                   <Badge color={getTemplateTypeBadgeColor(previewTemplate.type)}>
@@ -627,7 +574,7 @@ const AssignEvaluationsPage = () => {
             {/* Free Text Questions */}
             {previewTemplate.freeTextQuestions && previewTemplate.freeTextQuestions.length > 0 && (
               <Card className="p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Self-Reflection Questions</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Self-Reflection Questions</h3>
                 <div className="space-y-4">
                   {previewTemplate.freeTextQuestions.map((question, index) => (
                     <div key={question.id || index}>
@@ -638,7 +585,7 @@ const AssignEvaluationsPage = () => {
                         rows={3}
                         disabled
                         placeholder={question.placeholder || "Employee will answer this question..."}
-                        className="bg-gray-50"
+                        className="bg-gray-50 dark:bg-gray-800"
                       />
                     </div>
                   ))}
@@ -649,7 +596,7 @@ const AssignEvaluationsPage = () => {
             {/* Category Questions */}
             {previewTemplate.categories?.map((category) => (
               <Card key={category.id} className="p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{category.name}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{category.name}</h3>
                 {category.description && (
                   <p className="text-gray-600 mb-4">{category.description}</p>
                 )}
@@ -665,7 +612,7 @@ const AssignEvaluationsPage = () => {
                     
                     return (
                     <div key={question.id} className="border-b border-gray-200 pb-6 last:border-b-0">
-                      <h4 className="font-medium text-gray-900 mb-3">{question.text}</h4>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-3">{question.text}</h4>
                       
                       {/* Show what employees will see - USE SAME LOGIC AS EVALUATION FORM */}
                       {(question.type === 'rating' || question.type === 'dualRating' || !question.type) && (

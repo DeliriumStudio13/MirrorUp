@@ -24,7 +24,6 @@ import {
   UsersIcon,
   BuildingOfficeIcon,
   ClipboardDocumentListIcon,
-  ChartBarIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
   ClockIcon,
@@ -33,9 +32,7 @@ import {
   BookmarkIcon,
   UserIcon,
   PlayIcon,
-  EyeIcon,
-  CogIcon,
-  AcademicCapIcon
+  EyeIcon
 } from '@heroicons/react/24/outline';
 
 const DashboardOverview = () => {
@@ -293,115 +290,9 @@ const DashboardOverview = () => {
 
   const stats = getStats();
 
-  // Get recent evaluations based on role
-  const getRecentEvaluations = () => {
-    if (['employee'].includes(user?.role)) {
-      // Employees see their own evaluations
-      return evaluations
-        .filter(e => e.evaluateeId === (user.uid || user.id))
-        .sort((a, b) => new Date(b.createdAt || b.assignedDate) - new Date(a.createdAt || a.assignedDate))
-        .slice(0, 5);
-    } else {
-      // Managers/Admins see recent evaluations they're involved with
-      return evaluations
-        .sort((a, b) => new Date(b.createdAt || b.assignedDate) - new Date(a.createdAt || a.assignedDate))
-        .slice(0, 5);
-    }
-  };
 
-  const recentEvaluations = getRecentEvaluations();
 
-  // Role-based quick actions
-  const getQuickActions = () => {
-    if (['admin', 'hr'].includes(user?.role)) {
-      return [
-        {
-          name: 'Add Employee',
-          href: '/users/create',
-          icon: UsersIcon,
-          color: 'bg-blue-500'
-        },
-        {
-          name: 'Create Evaluation',
-          href: '/evaluations/assign',
-          icon: ClipboardDocumentListIcon,
-          color: 'bg-green-500'
-        },
-        {
-          name: 'Manage Departments',
-          href: '/departments',
-          icon: BuildingOfficeIcon,
-          color: 'bg-orange-500'
-        },
-        {
-          name: 'View Analytics',
-          href: '/analytics',
-          icon: ChartBarIcon,
-          color: 'bg-purple-500'
-        }
-      ];
-    } else if (['manager', 'supervisor'].includes(user?.role)) {
-      return [
-        {
-          name: 'Assign Evaluation',
-          href: '/evaluations/assign',
-          icon: ClipboardDocumentListIcon,
-          color: 'bg-green-500'
-        },
-        {
-          name: 'Review Evaluations',
-          href: '/evaluations/review',
-          icon: EyeIcon,
-          color: 'bg-blue-500'
-        },
-        {
-          name: 'My Team',
-          href: '/my-team',
-          icon: UsersIcon,
-          color: 'bg-purple-500'
-        },
-        {
-          name: 'My Evaluations',
-          href: '/evaluations/my-evaluations',
-          icon: UserIcon,
-          color: 'bg-orange-500'
-        }
-      ];
-    } else {
-      // Employee actions
-      const pendingCount = stats.pendingEvaluations || 0;
-      const draftCount = stats.draftsSaved || 0;
-      
-      return [
-        {
-          name: pendingCount > 0 ? `Start Evaluation (${pendingCount})` : 'My Evaluations',
-          href: pendingCount > 0 ? '/evaluations/pending' : '/evaluations/my-evaluations',
-          icon: pendingCount > 0 ? PlayIcon : ClipboardDocumentListIcon,
-          color: pendingCount > 0 ? 'bg-green-500' : 'bg-blue-500'
-        },
-        {
-          name: draftCount > 0 ? `Continue Draft (${draftCount})` : 'View My Results',
-          href: draftCount > 0 ? '/evaluations/pending' : '/evaluations/my-evaluations',
-          icon: draftCount > 0 ? BookmarkIcon : TrophyIcon,
-          color: draftCount > 0 ? 'bg-orange-500' : 'bg-purple-500'
-        },
-        {
-          name: 'My Performance',
-          href: '/evaluations/my-evaluations',
-          icon: AcademicCapIcon,
-          color: 'bg-indigo-500'
-        },
-        {
-          name: 'Settings',
-          href: '/settings',
-          icon: CogIcon,
-          color: 'bg-gray-500'
-        }
-      ];
-    }
-  };
 
-  const quickActions = getQuickActions();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -411,14 +302,14 @@ const DashboardOverview = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="md:flex md:items-center md:justify-between">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             {getGreeting()}, {user?.profile?.firstName}!
           </h1>
-          <p className="text-gray-600">
+          <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
             Welcome to your {businessData?.name} dashboard
           </p>
         </div>
@@ -426,16 +317,16 @@ const DashboardOverview = () => {
 
       {/* Role-based Stats Grid */}
       {loading || ((['admin', 'hr'].includes(user?.role)) && (usersLoading || departmentsLoading)) ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {[...Array(5)].map((_, i) => (
-            <Card key={i} className="p-4 animate-pulse">
-              <div className="flex items-center">
+            <Card key={i} className="p-8 min-h-[200px] animate-pulse">
+              <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
                 <div className="flex-shrink-0">
-                  <div className="h-6 w-6 bg-gray-300 rounded"></div>
+                  <div className="h-12 w-12 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
                 </div>
-                <div className="ml-3 space-y-2">
-                  <div className="h-4 bg-gray-300 rounded w-20"></div>
-                  <div className="h-6 bg-gray-300 rounded w-8"></div>
+                <div className="space-y-3 w-full">
+                  <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-24 mx-auto"></div>
+                  <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-16 mx-auto"></div>
                 </div>
               </div>
             </Card>
@@ -443,177 +334,177 @@ const DashboardOverview = () => {
         </div>
       ) : ['admin', 'hr'].includes(user?.role) ? (
         // Admin/HR Dashboard
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UsersIcon className="h-6 w-6 text-blue-600" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                <UsersIcon className="h-12 w-12 text-blue-600 dark:text-blue-400" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Total Employees</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.totalEmployees}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BuildingOfficeIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Departments</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.totalDepartments}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Total Employees</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.totalEmployees}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-yellow-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30">
+                <BuildingOfficeIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Active Evaluations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.activeEvaluations}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CheckCircleIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Completed</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.completedEvaluations}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Departments</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.totalDepartments}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                <ClipboardDocumentListIcon className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Overdue</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.overdueEvaluations}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Active Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.activeEvaluations}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
+                <CheckCircleIcon className="h-12 w-12 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.completedEvaluations}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-red-100">
+                <ExclamationTriangleIcon className="h-12 w-12 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Overdue</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.overdueEvaluations}</p>
               </div>
             </div>
           </Card>
         </div>
       ) : ['manager', 'supervisor'].includes(user?.role) ? (
         // Manager Dashboard  
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UsersIcon className="h-6 w-6 text-blue-600" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100">
+                <UsersIcon className="h-12 w-12 text-blue-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Team Evaluations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.teamEvaluations}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UserIcon className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">My Evaluations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.myEvaluations}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Team Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.teamEvaluations}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <EyeIcon className="h-6 w-6 text-orange-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100">
+                <UserIcon className="h-12 w-12 text-purple-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Pending Reviews</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.pendingReviews}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CheckCircleIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Completed This Month</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.completedThisMonth}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">My Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.myEvaluations}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100">
+                <EyeIcon className="h-12 w-12 text-orange-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Overdue</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.overdueEvaluations}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Pending Reviews</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.pendingReviews}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
+                <CheckCircleIcon className="h-12 w-12 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Completed This Month</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.completedThisMonth}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-red-100">
+                <ExclamationTriangleIcon className="h-12 w-12 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Overdue</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.overdueEvaluations}</p>
               </div>
             </div>
           </Card>
         </div>
       ) : (
         // Employee Dashboard
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <PlayIcon className="h-6 w-6 text-green-600" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
+                <PlayIcon className="h-12 w-12 text-green-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Pending Evaluations</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.pendingEvaluations}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BookmarkIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Drafts Saved</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.draftsSaved}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Pending Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.pendingEvaluations}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClockIcon className="h-6 w-6 text-blue-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100">
+                <BookmarkIcon className="h-12 w-12 text-orange-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Awaiting Review</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.waitingForReview}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Drafts Saved</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.draftsSaved}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <StarIcon className="h-6 w-6 text-yellow-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100">
+                <ClockIcon className="h-12 w-12 text-blue-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Current Rating</p>
-                <p className="text-2xl font-semibold text-gray-900">
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Awaiting Review</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.waitingForReview}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100">
+                <StarIcon className="h-12 w-12 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Current Rating</p>
+                <p className="text-4xl font-bold text-gray-900">
                   {stats.currentRating ? (
                     // Smart detection: if rating > 5, assume 10-point scale
                     stats.currentRating > 5 ? `${stats.currentRating}/10` : `${stats.currentRating}/5`
@@ -623,160 +514,19 @@ const DashboardOverview = () => {
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <TrophyIcon className="h-6 w-6 text-purple-600" />
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100">
+                <TrophyIcon className="h-12 w-12 text-purple-600" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Completed This Year</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.completedThisYear}</p>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Completed This Year</p>
+                <p className="text-4xl font-bold text-gray-900">{stats.completedThisYear}</p>
               </div>
             </div>
           </Card>
         </div>
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <div className="lg:col-span-1">
-          <Card>
-            <Card.Header title="Quick Actions" />
-            <Card.Body>
-              <div className="space-y-3">
-                {quickActions.map((action) => (
-                  <Link
-                    key={action.name}
-                    to={action.href}
-                    className="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors group"
-                  >
-                    <div className={`flex-shrink-0 p-2 rounded-lg ${action.color}`}>
-                      <action.icon className="h-5 w-5 text-white" />
-                    </div>
-                    <div className="ml-3 flex-1">
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-primary-600">
-                        {action.name}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </Card.Body>
-          </Card>
-        </div>
-
-        {/* Role-based Recent/Activity Section */}
-        <div className="lg:col-span-2">
-          <Card>
-            <Card.Header 
-              title={
-                user?.role === 'employee' ? 'My Evaluations' : 
-                ['manager', 'supervisor'].includes(user?.role) ? 'Recent Activity' : 
-                'Recent Evaluations'
-              } 
-              action={
-                <Link 
-                  to={
-                    user?.role === 'employee' ? '/evaluations/my-evaluations' :
-                    ['manager', 'supervisor'].includes(user?.role) ? '/my-team' :
-                    '/evaluations'
-                  } 
-                  className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                >
-                  View all
-                </Link>
-              }
-            />
-            <Card.Body>
-              {recentEvaluations.length > 0 ? (
-                <div className="space-y-4">
-                  {recentEvaluations.map((evaluation) => (
-                    <div key={evaluation.id} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0">
-                          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                            <span className="text-sm font-medium text-gray-700">
-                              {user?.role === 'employee' ? evaluation.templateName?.charAt(0) || 'E' :
-                               evaluation.evaluateeName?.split(' ').map(n => n[0]).join('') || 'U'}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-3">
-                          <p className="text-sm font-medium text-gray-900">
-                            {user?.role === 'employee' ? 
-                              evaluation.templateName : 
-                              evaluation.evaluateeName || 'Loading...'
-                            }
-                          </p>
-                          <div className="flex items-center text-sm text-gray-500">
-                            {evaluation.status === 'completed' ? (
-                              <>
-                                <CheckCircleIcon className="h-4 w-4 mr-1" />
-                                Completed on {formatDate(evaluation.managerReview?.reviewedAt || evaluation.submittedAt)}
-                              </>
-                            ) : evaluation.status === 'under-review' ? (
-                              <>
-                                <ClockIcon className="h-4 w-4 mr-1" />
-                                Under review
-                              </>
-                            ) : evaluation.status === 'in-progress' ? (
-                              <>
-                                <BookmarkIcon className="h-4 w-4 mr-1" />
-                                Draft saved
-                              </>
-                            ) : (
-                              <>
-                                <ClockIcon className="h-4 w-4 mr-1" />
-                                Due {formatDate(evaluation.dueDate)}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {evaluation.status === 'completed' && evaluation.managerReview?.overallRating && (
-                          <div className="flex items-center">
-                            <TrophyIcon className="h-4 w-4 text-yellow-500 mr-1" />
-                            <span className="text-sm font-medium text-gray-900">
-                              {evaluation.managerReview.overallRating}/{evaluation.maxScore || 5}
-                            </span>
-                          </div>
-                        )}
-                        <Badge.Status status={evaluation.status} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <ClipboardDocumentListIcon className="mx-auto h-12 w-12 text-gray-300" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    {user?.role === 'employee' ? 'No evaluations assigned' : 'No recent activity'}
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {user?.role === 'employee' ? 
-                      'Your manager will assign evaluations when it\'s time for your review.' :
-                      (usersLoading || departmentsLoading) ? 
-                        'Loading dashboard data...' :
-                        'Get started by creating your first evaluation.'
-                    }
-                  </p>
-                  {!['employee'].includes(user?.role) && (
-                    <div className="mt-3">
-                      <Link
-                        to="/evaluations/assign"
-                        className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                      >
-                        Assign Evaluation
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </div>
-      </div>
     </div>
   );
 };

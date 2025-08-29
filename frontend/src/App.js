@@ -24,6 +24,9 @@ import { DepartmentsPage } from './pages/departments';
 import { OrganizationChartPage } from './pages/organization';
 import { EvaluationTemplatesPage } from './pages/evaluations';
 
+// Admin pages
+import AssignmentManagementPage from './pages/admin/AssignmentManagementPage';
+
 // Hierarchical Evaluation System pages
 import { 
   MyTeamPage,
@@ -49,7 +52,7 @@ import {
 // import OrgChartPage from './pages/orgChart/OrgChartPage';
 // import BonusPage from './pages/bonus/BonusPage';
 // import SettingsPage from './pages/settings/SettingsPage';
-// import ProfilePage from './pages/profile/ProfilePage';
+
 
 // Common components
 import LoadingSpinner from './components/common/LoadingSpinner';
@@ -150,6 +153,15 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <UsersPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* Assignment Management (Admin Only) */}
+            <Route path="/assignments" element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AssignmentManagementPage />
                 </DashboardLayout>
               </ProtectedRoute>
             } />
@@ -363,13 +375,7 @@ function App() {
               </ProtectedRoute>
             } />
             
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ProfilePage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
+
             */}
             
             {/* Catch all - 404 */}
