@@ -109,7 +109,7 @@ service cloud.firestore {
       allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
       
       allow create: if isAuthenticated() && 
-        hasRole(['admin', 'hr', 'manager']) &&
+        hasRole(['admin', 'hr', 'head-manager', 'manager']) &&
         belongsToSameBusiness(request.resource.data.businessId);
       
       allow update: if isAuthenticated() && 
