@@ -417,7 +417,7 @@ const evaluationSlice = createSlice({
           currentPage: action.payload.page,
           pageSize: action.payload.pageSize,
           hasMore: action.payload.hasMore,
-          lastVisible: action.payload.lastVisible
+          lastVisible: null // Don't store Firebase QueryDocumentSnapshot in Redux
         };
         state.error = null;
       })
