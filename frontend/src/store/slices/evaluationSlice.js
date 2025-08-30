@@ -255,12 +255,12 @@ export const fetchEvaluationTemplates = createAsyncThunk(
           return; // Skip inactive templates if not including them
         }
         
-        // Convert Firebase timestamps to Date objects for consistency
+        // Convert Firebase timestamps to ISO strings for Redux serialization
         templates.push({ 
           id: doc.id, 
           ...data,
-          createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
-          updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+          updatedAt: data.updatedAt ? data.updatedAt.toDate().toISOString() : new Date().toISOString()
         });
       });
       
@@ -307,8 +307,8 @@ export const createEvaluationTemplate = createAsyncThunk(
       return { 
         id: createdDoc.id, 
         ...data,
-        createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
-        updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+        createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        updatedAt: data.updatedAt ? data.updatedAt.toDate().toISOString() : new Date().toISOString()
       };
     } catch (error) {
       return rejectWithValue(error.message);

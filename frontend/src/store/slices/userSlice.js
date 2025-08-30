@@ -128,7 +128,7 @@ export const createUser = createAsyncThunk(
           employeeId,
           department: userData.department || null,
           position: userData.position,
-          hireDate: new Date(userData.hireDate),
+          hireDate: userData.hireDate ? (userData.hireDate.toDate ? userData.hireDate.toDate().toISOString() : userData.hireDate) : null,
           salary: null,
           manager: null
         },
@@ -170,8 +170,8 @@ export const createUser = createAsyncThunk(
       const createdUser = {
         id: firebaseUser.uid,
         ...userDocument,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
 
       return createdUser;
