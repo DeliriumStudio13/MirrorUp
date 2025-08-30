@@ -9,7 +9,7 @@ import { fetchEvaluationTemplates } from '../../store/slices/evaluationSlice';
 import { fetchDepartments } from '../../store/slices/departmentSlice';
 import {
   fetchEvaluationAssignments,
-  selectEvaluationAssignments,
+  fetchBonusAssignments,
   selectEvaluationAssignmentsByEvaluator
 } from '../../store/slices/assignmentSlice';
 
@@ -38,8 +38,7 @@ const AssignEvaluationsPage = () => {
   const { users, loading: usersLoading } = useSelector(state => state.users);
   const { templates, loading: templatesLoading } = useSelector(state => state.evaluations);
   const { departments } = useSelector(state => state.departments);
-  const evaluationAssignments = useSelector(selectEvaluationAssignments);
-  const myAssignments = useSelector(state => selectEvaluationAssignmentsByEvaluator(state, user?.uid || user?.id));
+  const myAssignments = useSelector(state => selectEvaluationAssignmentsByEvaluator(state, user?.id));
 
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -72,8 +71,12 @@ const AssignEvaluationsPage = () => {
         const departmentsResult = await dispatch(fetchDepartments(user?.businessId));
         console.log('🏢 Departments loaded:', departmentsResult.payload?.length || 0);
         
-        const assignmentsResult = await dispatch(fetchEvaluationAssignments(user?.businessId));
-        console.log('📋 Evaluation assignments loaded:', assignmentsResult.payload?.length || 0);
+        // Fetch both evaluation and bonus assignments to ensure complete data
+        const [evalAssignmentsResult, bonusAssignmentsResult] = await Promise.all([
+          dispatch(fetchEvaluationAssignments(user?.businessId)),
+          dispatch(fetchBonusAssignments(user?.businessId))
+        ]);
+
         
       } catch (error) {
         console.error('❌ Error loading data:', error);
@@ -93,13 +96,7 @@ const AssignEvaluationsPage = () => {
   }, [dispatch, searchParams, user?.businessId]);
 
   useEffect(() => {
-    console.log('🔍 AssignEvaluations: Filtering team members based on assignments...');
-    console.log('📊 Assignment state:', {
-      users: users?.length || 0,
-      myAssignmentsCount: myAssignments?.length || 0,
-      userRole: user?.role,
-      userId: user?.id
-    });
+
     
     if (users && user && myAssignments) {
       // Filter team members based on evaluation assignments
@@ -113,20 +110,12 @@ const AssignEvaluationsPage = () => {
         return assignedUserIds.includes(u.id);
       });
       
-      console.log('✅ Assigned team members:', filteredUsers.length);
-      console.log('👥 Assigned members:', filteredUsers.map(u => ({
-        name: `${u.profile?.firstName} ${u.profile?.lastName}`,
-        role: u.role,
-        department: departments?.find(d => d.id === u.employeeInfo?.department)?.name
-      })));
-      
       setTeamMembers(filteredUsers);
     } else if (users && user && myAssignments?.length === 0) {
       // No assignments found - show empty list
-      console.log('❌ No evaluation assignments found for user');
       setTeamMembers([]);
     }
-  }, [users, user, myAssignments, departments]);
+  }, [users, user?.id, user?.uid, user?.role, myAssignments, departments]);
 
   const getTemplateTypeBadgeColor = (type) => {
     switch (type) {

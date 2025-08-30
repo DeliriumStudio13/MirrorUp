@@ -20,7 +20,7 @@ const Badge = ({
     success: 'badge-success',
     warning: 'badge-warning',
     danger: 'badge-danger',
-    gray: 'bg-gray-100 text-gray-800'
+    gray: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
   };
 
   const sizeClasses = {

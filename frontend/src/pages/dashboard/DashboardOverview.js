@@ -306,7 +306,7 @@ const DashboardOverview = () => {
       {/* Header */}
       <div className="md:flex md:items-center md:justify-between">
         <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white">
             {getGreeting()}, {user?.profile?.firstName}!
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
@@ -337,12 +337,36 @@ const DashboardOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                <UsersIcon className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100 dark:bg-blue-900/30 dark:bg-blue-900/30">
+                <UsersIcon className="h-12 w-12 text-blue-600 dark:text-blue-400 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Total Employees</p>
-                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.totalEmployees}</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white dark:text-white">{stats.totalEmployees}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30 dark:bg-green-900/30">
+                <BuildingOfficeIcon className="h-12 w-12 text-green-600 dark:text-green-400 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Departments</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white dark:text-white">{stats.totalDepartments}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-8 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30 dark:bg-yellow-900/30">
+                <ClipboardDocumentListIcon className="h-12 w-12 text-yellow-600 dark:text-yellow-400 dark:text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Active Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white dark:text-white">{stats.activeEvaluations}</p>
               </div>
             </div>
           </Card>
@@ -350,47 +374,23 @@ const DashboardOverview = () => {
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
               <div className="flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30">
-                <BuildingOfficeIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
+                <CheckCircleIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Departments</p>
-                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.totalDepartments}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Completed</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.completedEvaluations}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
-                <ClipboardDocumentListIcon className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-red-100 dark:bg-red-900/30">
+                <ExclamationTriangleIcon className="h-12 w-12 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Active Evaluations</p>
-                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.activeEvaluations}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-8 min-h-[200px]">
-            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
-                <CheckCircleIcon className="h-12 w-12 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Completed</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.completedEvaluations}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-8 min-h-[200px]">
-            <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-red-100">
-                <ExclamationTriangleIcon className="h-12 w-12 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Overdue</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.overdueEvaluations}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Overdue</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.overdueEvaluations}</p>
               </div>
             </div>
           </Card>
@@ -400,60 +400,60 @@ const DashboardOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100">
-                <UsersIcon className="h-12 w-12 text-blue-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                <UsersIcon className="h-12 w-12 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Team Evaluations</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.teamEvaluations}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Team Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.teamEvaluations}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100">
-                <UserIcon className="h-12 w-12 text-purple-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                <UserIcon className="h-12 w-12 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">My Evaluations</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.myEvaluations}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">My Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.myEvaluations}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100">
-                <EyeIcon className="h-12 w-12 text-orange-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100 dark:bg-orange-900/30">
+                <EyeIcon className="h-12 w-12 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Pending Reviews</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.pendingReviews}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Pending Reviews</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.pendingReviews}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
-                <CheckCircleIcon className="h-12 w-12 text-green-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30">
+                <CheckCircleIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Completed This Month</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.completedThisMonth}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Completed This Month</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.completedThisMonth}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-red-100">
-                <ExclamationTriangleIcon className="h-12 w-12 text-red-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-red-100 dark:bg-red-900/30">
+                <ExclamationTriangleIcon className="h-12 w-12 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Overdue</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.overdueEvaluations}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Overdue</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.overdueEvaluations}</p>
               </div>
             </div>
           </Card>
@@ -463,48 +463,48 @@ const DashboardOverview = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-green-100">
-                <PlayIcon className="h-12 w-12 text-green-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30">
+                <PlayIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Pending Evaluations</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.pendingEvaluations}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Pending Evaluations</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.pendingEvaluations}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100">
-                <BookmarkIcon className="h-12 w-12 text-orange-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-orange-100 dark:bg-orange-900/30">
+                <BookmarkIcon className="h-12 w-12 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Drafts Saved</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.draftsSaved}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Drafts Saved</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.draftsSaved}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100">
-                <ClockIcon className="h-12 w-12 text-blue-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                <ClockIcon className="h-12 w-12 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Awaiting Review</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.waitingForReview}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Awaiting Review</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.waitingForReview}</p>
               </div>
             </div>
           </Card>
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100">
-                <StarIcon className="h-12 w-12 text-yellow-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                <StarIcon className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Current Rating</p>
-                <p className="text-4xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Current Rating</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">
                   {stats.currentRating ? (
                     // Smart detection: if rating > 5, assume 10-point scale
                     stats.currentRating > 5 ? `${stats.currentRating}/10` : `${stats.currentRating}/5`
@@ -516,12 +516,12 @@ const DashboardOverview = () => {
 
           <Card className="p-8 min-h-[200px]">
             <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
-              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100">
-                <TrophyIcon className="h-12 w-12 text-purple-600" />
+              <div className="flex-shrink-0 p-4 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                <TrophyIcon className="h-12 w-12 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Completed This Year</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.completedThisYear}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Completed This Year</p>
+                <p className="text-4xl font-bold text-gray-900 dark:text-white">{stats.completedThisYear}</p>
               </div>
             </div>
           </Card>

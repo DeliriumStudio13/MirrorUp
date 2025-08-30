@@ -16,7 +16,11 @@ import Badge from '../../components/common/Badge';
 import { fetchUsers, selectUsers } from '../../store/slices/userSlice';
 import { fetchDepartments, selectDepartments } from '../../store/slices/departmentSlice';
 import { fetchEvaluations } from '../../store/slices/evaluationSlice';
-import { fetchBonusAssignments, selectBonusAssignmentsByAllocator } from '../../store/slices/assignmentSlice';
+import { 
+  fetchBonusAssignments, 
+  fetchEvaluationAssignments, 
+  selectBonusAssignmentsByAllocator
+} from '../../store/slices/assignmentSlice';
 import { formatDate } from '../../utils/dateUtils';
 import { db } from '../../firebase/config';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -27,7 +31,7 @@ const BonusAllocationPage = () => {
   const { user } = useSelector((state) => state.auth);
   const users = useSelector(selectUsers);
   const departments = useSelector(selectDepartments);
-  const bonusAssignments = useSelector((state) => selectBonusAssignmentsByAllocator(state, user?.uid || user?.id));
+  const bonusAssignments = useSelector((state) => selectBonusAssignmentsByAllocator(state, user?.id));
   
   // Local state for evaluations
   const [evaluations, setEvaluations] = useState([]);
@@ -72,10 +76,11 @@ const BonusAllocationPage = () => {
       setLoading(true);
       try {
         // Fetch users, departments, and bonus assignments
-        await Promise.all([
+        const [usersResult, deptResult, bonusResult, evalResult] = await Promise.all([
           dispatch(fetchUsers(user?.businessId)),
           dispatch(fetchDepartments(user?.businessId)),
-          dispatch(fetchBonusAssignments(user?.businessId))
+          dispatch(fetchBonusAssignments(user?.businessId)),
+          dispatch(fetchEvaluationAssignments(user?.businessId))
         ]);
         
         // Fetch evaluations with fallback to direct Firebase query
@@ -126,10 +131,11 @@ const BonusAllocationPage = () => {
     if (user?.businessId) {
       loadData();
     }
-  }, [dispatch, user?.businessId, loadExistingAllocation]);
+  }, [dispatch, user?.businessId, user?.id, user?.uid, user?.role, loadExistingAllocation]);
 
   // Process team members with their latest evaluation scores
   useEffect(() => {
+
     if (!users.length) return;
 
     // Filter team members based on role and assignments
@@ -137,7 +143,7 @@ const BonusAllocationPage = () => {
     
     if (['admin', 'hr'].includes(user?.role)) {
       // Admin/HR can see all users
-      assignedMembers = users.filter(member => member.id !== user.uid && member.id !== user.id);
+      assignedMembers = users.filter(member => member.id !== user.id);
     } else if (user?.role === 'head-manager') {
       // Check multiple possible department field locations
       const userDepartmentId = user?.employeeInfo?.department || user?.departmentId || user?.department;
@@ -150,10 +156,8 @@ const BonusAllocationPage = () => {
         departmentMembers = users.filter(member => {
           // Check multiple possible department field locations for team members
           const memberDepartmentId = member.employeeInfo?.department || member.departmentId || member.department;
-          return memberDepartmentId === userDepartment.id && 
-                 member.id !== user.uid && member.id !== user.id;
+          return memberDepartmentId === userDepartment.id && member.id !== user.id;
         });
-
       }
       
       // Also include users from bonus assignments
@@ -216,7 +220,7 @@ const BonusAllocationPage = () => {
     });
 
     setTeamMembers(membersWithScores);
-  }, [users, bonusAssignments, bonusAllocations, evaluations, departments, user]);
+  }, [users, bonusAssignments, bonusAllocations, evaluations, departments, user?.id, user?.uid, user?.role]);
 
   // Auto-calculate bonus allocations based on performance scores
   const calculateAutoAllocation = useCallback(() => {

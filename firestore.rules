@@ -56,6 +56,8 @@ service cloud.firestore {
         (request.auth.uid == userId || 
          belongsToSameBusiness(resource.data.businessId));
       
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
+      
       allow create: if isAuthenticated() && hasRole(['admin', 'hr']) &&
         belongsToSameBusiness(request.resource.data.businessId);
       
@@ -85,6 +87,8 @@ service cloud.firestore {
       allow read: if isAuthenticated() && 
         belongsToSameBusiness(resource.data.businessId);
       
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
+      
       allow create, update: if isAuthenticated() && 
         hasRole(['admin', 'hr']) &&
         belongsToSameBusiness(request.resource.data.businessId);
@@ -98,9 +102,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && 
         belongsToSameBusiness(resource.data.businessId) &&
         (hasRole(['admin', 'hr']) || 
-         request.auth.uid == resource.data.employeeId ||
+         request.auth.uid == resource.data.evaluateeId ||
          request.auth.uid == resource.data.evaluatorId ||
-         (isManager() && resource.data.employeeId in getUserData().subordinates));
+         (isManager() && resource.data.evaluateeId in getUserData().subordinates));
+      
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
       
       allow create: if isAuthenticated() && 
         hasRole(['admin', 'hr', 'manager']) &&
@@ -110,8 +116,8 @@ service cloud.firestore {
         belongsToSameBusiness(resource.data.businessId) &&
         (hasRole(['admin', 'hr']) ||
          request.auth.uid == resource.data.evaluatorId ||
-         (resource.data.workflow.status == 'draft' && 
-          request.auth.uid == resource.data.employeeId));
+         (resource.data.status == 'draft' && 
+          request.auth.uid == resource.data.evaluateeId));
       
       allow delete: if isAuthenticated() && hasRole(['admin']) &&
         belongsToSameBusiness(resource.data.businessId);
@@ -121,6 +127,8 @@ service cloud.firestore {
     match /evaluationTemplates/{templateId} {
       allow read: if isAuthenticated() && 
         belongsToSameBusiness(resource.data.businessId);
+      
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
       
       allow create, update: if isAuthenticated() && 
         hasRole(['admin', 'hr']) &&
@@ -186,6 +194,42 @@ service cloud.firestore {
         hasRole(['admin']);
       
       allow delete: if false; // Settings can't be deleted
+    }
+    
+    // Evaluation Assignments collection
+    match /evaluationAssignments/{assignmentId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        (hasRole(['admin', 'hr']) || 
+         request.auth.uid == resource.data.evaluateeId ||
+         request.auth.uid == resource.data.evaluatorId);
+      
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
+      
+      allow create, update: if isAuthenticated() && 
+        hasRole(['admin', 'hr', 'head-manager', 'manager']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(resource.data.businessId);
+    }
+    
+    // Bonus Assignments collection
+    match /bonusAssignments/{assignmentId} {
+      allow read: if isAuthenticated() && 
+        belongsToSameBusiness(resource.data.businessId) &&
+        (hasRole(['admin', 'hr']) || 
+         request.auth.uid == resource.data.recipientId ||
+         request.auth.uid == resource.data.allocatorId);
+      
+      allow list: if isAuthenticated() && hasRole(['admin', 'hr', 'head-manager', 'manager']);
+      
+      allow create, update: if isAuthenticated() && 
+        hasRole(['admin', 'hr', 'head-manager']) &&
+        belongsToSameBusiness(request.resource.data.businessId);
+      
+      allow delete: if isAuthenticated() && hasRole(['admin', 'hr']) &&
+        belongsToSameBusiness(resource.data.businessId);
     }
   }
 }

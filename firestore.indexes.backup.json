@@ -59,7 +59,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "workflow.status",
           "order": "ASCENDING"
         },
         {
@@ -77,7 +77,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "evaluateeId",
+          "fieldPath": "employeeId",
           "order": "ASCENDING"
         },
         {
@@ -131,47 +131,11 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "evaluateeId",
+          "fieldPath": "workflow.dueDate",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "evaluations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "evaluatorId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "evaluations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dueDate",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
+          "fieldPath": "workflow.status",
           "order": "ASCENDING"
         }
       ]
@@ -189,7 +153,7 @@
           "order": "DESCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "workflow.status",
           "order": "ASCENDING"
         }
       ]
@@ -319,132 +283,6 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bonusAllocations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "department",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "evaluationAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "assignedDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "evaluationAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "evaluatorId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "evaluationAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "evaluateeId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bonusAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "assignedDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bonusAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "allocatorId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bonusAssignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "businessId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "recipientId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
         }
       ]
     }
