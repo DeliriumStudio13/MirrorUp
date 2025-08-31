@@ -1,10 +1,16 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { databaseService, functionsService } from '../../firebase/services';
+import { databaseService, functionsService, authService } from '../../firebase/services';
 import { 
   collection, 
   getDocs, 
   query, 
-  where
+  where,
+  doc,
+  getDoc,
+  deleteDoc,
+  updateDoc,
+  increment,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -32,11 +38,9 @@ export const fetchUsers = createAsyncThunk(
   'users/fetchUsers',
   async (businessId, { rejectWithValue }) => {
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(
-        usersRef,
-        where('businessId', '==', businessId)
-      );
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
+      const usersRef = collection(db, 'businesses', businessId, 'users');
+      const q = query(usersRef);  // No where clause needed - already scoped to business!
       
       const snapshot = await getDocs(q);
       const users = snapshot.docs.map(doc => ({
@@ -53,9 +57,9 @@ export const fetchUsers = createAsyncThunk(
 
 export const fetchUser = createAsyncThunk(
   'users/fetchUser',
-  async (userId, { rejectWithValue }) => {
+  async ({ businessId, userId }, { rejectWithValue }) => {
     try {
-      const result = await databaseService.getById('users', userId);
+      const result = await databaseService.getById(`businesses/${businessId}/users`, userId);
       if (!result.success) {
         throw new Error(result.error || 'User not found');
       }
@@ -114,8 +118,8 @@ export const createUser = createAsyncThunk(
       const employeeId = `EMP_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
       // Create user document in Firestore (using main db instance)
+      // 🚀 NEW: No businessId in document - it's implicit in the subcollection path!
       const userDocument = {
-        businessId,
         profile: {
           firstName: userData.firstName,
           lastName: userData.lastName,
@@ -146,19 +150,35 @@ export const createUser = createAsyncThunk(
         updatedAt: serverTimestamp()
       };
 
-      await setDoc(doc(db, 'users', firebaseUser.uid), userDocument);
+      // 🚀 NEW: Save to subcollection path!
+      await setDoc(doc(db, 'businesses', businessId, 'users', firebaseUser.uid), userDocument);
+      
+      // 🚀 NEW: Create user-business mapping for auth lookups
+      await setDoc(doc(db, 'userBusinessMap', firebaseUser.uid), {
+        businessId,
+        email: userData.email,
+        role: userData.role,
+        createdAt: serverTimestamp()
+      });
 
       console.log('User document created in Firestore');
 
       // Update department employee count if department is assigned
       if (userData.department) {
-        const { doc: firestoreDoc, updateDoc, increment } = await import('firebase/firestore');
-        const departmentRef = firestoreDoc(db, 'departments', userData.department);
-        await updateDoc(departmentRef, {
-          employeeCount: increment(1),
-          updatedAt: serverTimestamp()
-        });
-        console.log('Department employee count updated');
+        const { doc: firestoreDoc, updateDoc, increment, getDoc } = await import('firebase/firestore');
+        const departmentRef = firestoreDoc(db, 'businesses', businessId, 'departments', userData.department);
+        
+        // Check if department exists before updating
+        const departmentSnap = await getDoc(departmentRef);
+        if (departmentSnap.exists()) {
+          await updateDoc(departmentRef, {
+            employeeCount: increment(1),
+            updatedAt: serverTimestamp()
+          });
+          console.log('Department employee count updated');
+        } else {
+          console.warn('Department not found:', userData.department);
+        }
       }
 
       // Clean up secondary app
@@ -199,7 +219,7 @@ export const updateUser = createAsyncThunk(
   async ({ userId, userData, businessId, currentUser }, { rejectWithValue }) => {
     try {
       // Get current user data to check if department changed
-      const oldUserResult = await databaseService.getById('users', userId);
+      const oldUserResult = await databaseService.getById(`businesses/${businessId}/users`, userId);
       const oldUser = oldUserResult.success ? oldUserResult.data : null;
       
       const oldDepartment = oldUser?.employeeInfo?.department;
@@ -218,36 +238,42 @@ export const updateUser = createAsyncThunk(
         updatedAt: databaseService.serverTimestamp()
       };
 
-      await databaseService.update('users', userId, updateData);
+      await databaseService.update(`businesses/${businessId}/users`, userId, updateData);
       
       // Handle department count changes
       if (oldDepartment !== newDepartment) {
-        const { doc: firestoreDoc, updateDoc, increment, serverTimestamp } = await import('firebase/firestore');
+        const { doc: firestoreDoc, updateDoc, increment, serverTimestamp, getDoc } = await import('firebase/firestore');
         const { db } = await import('../../firebase/config');
         
         // Decrease count from old department
         if (oldDepartment) {
-          const oldDeptRef = firestoreDoc(db, 'departments', oldDepartment);
-          await updateDoc(oldDeptRef, {
-            employeeCount: increment(-1),
-            updatedAt: serverTimestamp()
-          });
-          console.log('Decreased employee count in old department:', oldDepartment);
+          const oldDeptRef = firestoreDoc(db, 'businesses', businessId, 'departments', oldDepartment);
+          const oldDeptSnap = await getDoc(oldDeptRef);
+          if (oldDeptSnap.exists()) {
+            await updateDoc(oldDeptRef, {
+              employeeCount: increment(-1),
+              updatedAt: serverTimestamp()
+            });
+            console.log('Decreased employee count in old department:', oldDepartment);
+          }
         }
         
         // Increase count in new department
         if (newDepartment) {
-          const newDeptRef = firestoreDoc(db, 'departments', newDepartment);
-          await updateDoc(newDeptRef, {
-            employeeCount: increment(1),
-            updatedAt: serverTimestamp()
-          });
-          console.log('Increased employee count in new department:', newDepartment);
+          const newDeptRef = firestoreDoc(db, 'businesses', businessId, 'departments', newDepartment);
+          const newDeptSnap = await getDoc(newDeptRef);
+          if (newDeptSnap.exists()) {
+            await updateDoc(newDeptRef, {
+              employeeCount: increment(1),
+              updatedAt: serverTimestamp()
+            });
+            console.log('Increased employee count in new department:', newDepartment);
+          }
         }
       }
       
       // Return updated user data
-      const updatedResult = await databaseService.getById('users', userId);
+      const updatedResult = await databaseService.getById(`businesses/${businessId}/users`, userId);
       return updatedResult.success ? updatedResult.data : null;
     } catch (error) {
       return rejectWithValue(error.message);
@@ -259,18 +285,41 @@ export const deleteUser = createAsyncThunk(
   'users/deleteUser',
   async ({ userId, businessId }, { rejectWithValue }) => {
     try {
-      // Call Cloud Function to delete user (handles Firebase Auth deletion)
-      const result = await functionsService.call('userDeleteUser', {
-        userId,
-        businessId
-      });
+      // Get user's department before deletion
+      const userDoc = await getDoc(doc(db, 'businesses', businessId, 'users', userId));
       
-      if (!result.success) {
-        throw new Error(result.error);
+      if (!userDoc.exists()) {
+        throw new Error('User not found');
       }
-      
+
+      const userData = userDoc.data();
+      const departmentId = userData.employeeInfo?.department;
+
+      // Delete user from Firebase Auth
+      await authService.deleteUserAccount(userId);
+
+      // Delete user document and mapping
+      await Promise.all([
+        deleteDoc(doc(db, 'businesses', businessId, 'users', userId)),
+        deleteDoc(doc(db, 'userBusinessMap', userId))
+      ]);
+
+      // Update department employee count if user was assigned to a department
+      if (departmentId) {
+        const departmentRef = doc(db, 'businesses', businessId, 'departments', departmentId);
+        const departmentDoc = await getDoc(departmentRef);
+        
+        if (departmentDoc.exists()) {
+          await updateDoc(departmentRef, {
+            employeeCount: increment(-1),
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
       return userId;
     } catch (error) {
+      console.error('Delete user error:', error);
       return rejectWithValue(error.message || 'Failed to delete user');
     }
   }
@@ -287,13 +336,15 @@ export const fixDepartmentCounts = createAsyncThunk(
       const { db } = await import('../../firebase/config');
       
       // Get all users for this business
-      const usersRef = collection(db, 'users');
-      const usersQuery = query(usersRef, where('businessId', '==', businessId));
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
+      const usersRef = collection(db, 'businesses', businessId, 'users');
+      const usersQuery = query(usersRef);
       const usersSnapshot = await getDocs(usersQuery);
       
       // Get all departments for this business
-      const departmentsRef = collection(db, 'departments');
-      const departmentsQuery = query(departmentsRef, where('businessId', '==', businessId));
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
+      const departmentsRef = collection(db, 'businesses', businessId, 'departments');
+      const departmentsQuery = query(departmentsRef);
       const departmentsSnapshot = await getDocs(departmentsQuery);
       
       // Count employees per department
@@ -315,7 +366,8 @@ export const fixDepartmentCounts = createAsyncThunk(
       
       // Update each department's employee count
       const updatePromises = Object.entries(departmentCounts).map(([deptId, count]) => {
-        const deptRef = doc(db, 'departments', deptId);
+        // 🚀 NEW: Use subcollection path
+        const deptRef = doc(db, 'businesses', businessId, 'departments', deptId);
         return updateDoc(deptRef, {
           employeeCount: count,
           updatedAt: serverTimestamp()

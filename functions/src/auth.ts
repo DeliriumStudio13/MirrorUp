@@ -77,9 +77,8 @@ export const createBusinessAndAdmin = onCall(
 
       await db.collection('businesses').doc(businessId).set(businessDoc);
 
-      // Create admin user document
+      // 🚀 NEW: Create admin user document in subcollection (no businessId - implicit in path)
       const userDoc = {
-        businessId,
         profile: {
           firstName: adminData.firstName,
           lastName: adminData.lastName,
@@ -110,7 +109,13 @@ export const createBusinessAndAdmin = onCall(
         updatedAt: FieldValue.serverTimestamp()
       };
 
-      await db.collection('users').doc(firebaseUser.uid).set(userDoc);
+      await db.collection('businesses').doc(businessId).collection('users').doc(firebaseUser.uid).set(userDoc);
+      
+      // 🚀 NEW: Create user-business mapping for authentication lookups
+      await db.collection('userBusinessMap').doc(firebaseUser.uid).set({
+        businessId,
+        createdAt: FieldValue.serverTimestamp()
+      });
 
       logger.info('Successfully created business and admin user', { 
         businessId,

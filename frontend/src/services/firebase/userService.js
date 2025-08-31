@@ -15,7 +15,13 @@ import { db, functions } from '../../firebase/config';
 
 class UserService {
   constructor() {
+    // 🚀 NEW: Collection is now dynamic based on business
     this.collection = 'users';
+  }
+
+  // 🚀 NEW: Helper to get business-scoped collection path
+  getBusinessUsersCollection(businessId) {
+    return `businesses/${businessId}/users`;
   }
 
   // Get all users for a business with pagination and filtering
@@ -32,47 +38,44 @@ class UserService {
         isActive = true
       } = filters;
 
-      let userQuery = query(
-        collection(db, this.collection),
-        where('businessId', '==', businessId),
-        where('isActive', '==', isActive)
+      // Simple collection query without any filters or ordering
+      const userQuery = query(
+        collection(db, this.getBusinessUsersCollection(businessId))
       );
 
-      // Add filters
-      if (role && role !== 'all') {
-        userQuery = query(userQuery, where('role', '==', role));
-      }
-
-      if (department && department !== 'all') {
-        userQuery = query(userQuery, where('employeeInfo.department', '==', department));
-      }
-
-      // Add sorting
-      userQuery = query(userQuery, orderBy(sortBy, sortOrder));
-
-      // Add pagination
-      if (page > 1) {
-        // In a real implementation, you'd need to store the last document from previous page
-        // For now, we'll use a simple offset approach (not recommended for large datasets)
-        userQuery = query(userQuery, limit(pageSize * page));
-      } else {
-        userQuery = query(userQuery, limit(pageSize));
-      }
-
       const querySnapshot = await getDocs(userQuery);
-      const users = [];
+      let users = [];
       
+      // Client-side filtering
       querySnapshot.forEach((doc) => {
         const userData = { id: doc.id, ...doc.data() };
         
-        // Apply search filter (client-side for now)
-        if (!search || 
+        // Apply all filters client-side
+        if (
+          // Active status filter
+          (!isActive || userData.isActive === isActive) &&
+          // Role filter
+          (!role || role === 'all' || userData.role === role) &&
+          // Department filter
+          (!department || department === 'all' || userData.employeeInfo?.department === department) &&
+          // Search filter
+          (!search || 
             userData.profile.firstName.toLowerCase().includes(search.toLowerCase()) ||
             userData.profile.lastName.toLowerCase().includes(search.toLowerCase()) ||
             userData.email.toLowerCase().includes(search.toLowerCase()) ||
-            userData.employeeInfo?.position?.toLowerCase().includes(search.toLowerCase())) {
+            userData.employeeInfo?.position?.toLowerCase().includes(search.toLowerCase()))
+        ) {
           users.push(userData);
         }
+      });
+
+      // Client-side sorting
+      users.sort((a, b) => {
+        const aValue = sortBy.split('.').reduce((obj, key) => obj?.[key], a) || '';
+        const bValue = sortBy.split('.').reduce((obj, key) => obj?.[key], b) || '';
+        return sortOrder === 'asc' ? 
+          aValue.localeCompare(bValue) : 
+          bValue.localeCompare(aValue);
       });
 
       // Apply pagination to search results
@@ -170,10 +173,11 @@ class UserService {
   }
 
   // Get user's subordinates
-  async getUserSubordinates(managerId) {
+  async getUserSubordinates(managerId, businessId) {
     try {
+      // 🚀 NEW: Use subcollection
       const subordinatesQuery = query(
-        collection(db, this.collection),
+        collection(db, this.getBusinessUsersCollection(businessId)),
         where('employeeInfo.manager', '==', managerId),
         where('isActive', '==', true)
       );
@@ -193,10 +197,11 @@ class UserService {
   }
 
   // Get users by department
-  async getUsersByDepartment(departmentId) {
+  async getUsersByDepartment(departmentId, businessId) {
     try {
+      // 🚀 NEW: Use subcollection
       const usersQuery = query(
-        collection(db, this.collection),
+        collection(db, this.getBusinessUsersCollection(businessId)),
         where('employeeInfo.department', '==', departmentId),
         where('isActive', '==', true),
         orderBy('profile.firstName')
@@ -274,9 +279,9 @@ class UserService {
     try {
       const { role, department, limit: searchLimit = 50 } = filters;
 
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
       let userQuery = query(
-        collection(db, this.collection),
-        where('businessId', '==', businessId),
+        collection(db, this.getBusinessUsersCollection(businessId)),
         where('isActive', '==', true),
         limit(searchLimit)
       );

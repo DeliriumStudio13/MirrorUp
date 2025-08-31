@@ -6,11 +6,8 @@ import {
   TrashIcon,
   EyeIcon,
   DocumentTextIcon,
-  AdjustmentsHorizontalIcon,
   ArrowPathIcon,
-  ChartBarIcon,
-  ClipboardDocumentListIcon,
-  WrenchScrewdriverIcon
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
 
 // Utils
@@ -21,7 +18,6 @@ import {
   createEvaluationTemplate,
   updateEvaluationTemplate,
   deleteEvaluationTemplate,
-  fixTemplateQuestionTypes,
   selectEvaluationTemplates,
   selectTemplatesLoading,
   selectEvaluationsError,
@@ -37,7 +33,6 @@ import {
   Badge, 
   LoadingSpinner 
 } from '../../components/common';
-import { TemplateBuilder } from '../../components/evaluations';
 
 const EvaluationTemplatesPage = () => {
   const dispatch = useDispatch();
@@ -50,18 +45,16 @@ const EvaluationTemplatesPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
+
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all');
 
-  // Template form state
+  // Template form state - SIMPLIFIED
   const [templateForm, setTemplateForm] = useState({
     name: '',
     description: '',
-    type: 'performance', // performance, goals, competency, 360
-    scoringSystem: '1-5', // 1-5, 1-10, percentage, letter
-    categories: [],
+    categories: [], // Array of {name, weight, questions: []}
+    freeTextQuestions: [], // Array of open-ended questions
     instructions: '',
     isActive: true
   });
@@ -88,11 +81,49 @@ const EvaluationTemplatesPage = () => {
 
   const handleCreateTemplate = async () => {
     try {
-      await dispatch(createEvaluationTemplate({
-        ...templateForm,
+      // Transform categories to proper structure for evaluation form
+      const transformedCategories = templateForm.categories.map(category => ({
+        id: category.id.toString(),
+        name: category.name,
+        weight: category.weight,
+        description: '', // No description in simplified version
+        questions: category.questions
+          .filter(q => q.trim()) // Remove empty questions
+          .map((question, index) => ({
+            id: `${category.id}_q${index}`,
+            text: question,
+            type: 'rating', // All questions are rating type (1-5 scale)
+            required: true,
+            weight: 1 // Equal weight for all questions in a category
+          }))
+      })).filter(category => category.name.trim() && category.questions.length > 0); // Only include categories with name and questions
+
+      // Transform free text questions
+      const transformedFreeTextQuestions = templateForm.freeTextQuestions
+        .filter(q => q.trim()) // Remove empty questions
+        .map((question, index) => ({
+          id: `freetext_${Date.now()}_${index}`,
+          text: question,
+          type: 'freeText',
+          required: true,
+          placeholder: 'Please provide your response...'
+        }));
+
+      // Create simplified template structure
+      const newTemplate = {
+        name: templateForm.name,
+        description: templateForm.description,
+        instructions: templateForm.instructions,
+        categories: transformedCategories,
+        freeTextQuestions: transformedFreeTextQuestions,
+        type: 'evaluation', // Simplified - no complex types
+        scoringSystem: '1-5', // Fixed to 1-5 scale
         businessId: currentUser.businessId,
-        createdBy: currentUser.id
-      })).unwrap();
+        createdBy: currentUser.id,
+        isActive: true
+      };
+
+      await dispatch(createEvaluationTemplate(newTemplate)).unwrap();
       
       // Refresh the templates list
       await dispatch(fetchEvaluationTemplates({ 
@@ -130,7 +161,10 @@ const EvaluationTemplatesPage = () => {
 
   const handleDeleteTemplate = async () => {
     try {
-      await dispatch(deleteEvaluationTemplate(selectedTemplate.id)).unwrap();
+      await dispatch(deleteEvaluationTemplate({
+        businessId: currentUser.businessId,
+        templateId: selectedTemplate.id
+      })).unwrap();
       
       // Refresh the templates list
       await dispatch(fetchEvaluationTemplates({ 
@@ -149,65 +183,29 @@ const EvaluationTemplatesPage = () => {
     setTemplateForm({
       name: '',
       description: '',
-      type: 'performance',
-      scoringSystem: '1-5',
       categories: [],
+      freeTextQuestions: [],
       instructions: '',
       isActive: true
     });
   };
 
-  const handleSaveTemplateBuilder = async (templateData) => {
-    try {
-      await dispatch(updateEvaluationTemplate({
-        templateId: templateData.id,
-        updates: {
-          categories: templateData.categories,
-          name: templateData.name,
-          description: templateData.description,
-          type: templateData.type,
-          scoringSystem: templateData.scoringSystem,
-          instructions: templateData.instructions,
-          isActive: templateData.isActive
-        }
-      })).unwrap();
-      
-      // Refresh templates list
-      await dispatch(fetchEvaluationTemplates({ 
-        businessId: currentUser.businessId,
-        includeInactive: true 
-      }));
-      
-      setShowTemplateBuilder(false);
-      setSelectedTemplate(null);
-    } catch (error) {
-      console.error('Error saving template:', error);
-    }
-  };
 
-  const handleCancelTemplateBuilder = () => {
-    setShowTemplateBuilder(false);
-    setSelectedTemplate(null);
-  };
 
   const openEditModal = (template) => {
     setSelectedTemplate(template);
     setTemplateForm({
       name: template.name,
       description: template.description,
-      type: template.type,
-      scoringSystem: template.scoringSystem,
       categories: template.categories || [],
+      freeTextQuestions: template.freeTextQuestions?.map(q => q.text) || [],
       instructions: template.instructions || '',
       isActive: template.isActive
     });
     setShowEditModal(true);
   };
 
-  const openTemplateBuilder = (template) => {
-    setSelectedTemplate(template);
-    setShowTemplateBuilder(true);
-  };
+
 
   const openViewModal = (template) => {
     setSelectedTemplate(template);
@@ -219,43 +217,12 @@ const EvaluationTemplatesPage = () => {
     setShowDeleteModal(true);
   };
 
-  // Filter templates based on search and type
+  // Filter templates based on search only
   const filteredTemplates = templates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          template.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || template.type === filterType;
-    return matchesSearch && matchesType;
+    return matchesSearch;
   });
-
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'performance': return <ChartBarIcon className="h-5 w-5" />;
-      case 'goals': return <AdjustmentsHorizontalIcon className="h-5 w-5" />;
-      case 'competency': return <ClipboardDocumentListIcon className="h-5 w-5" />;
-      case '360': return <DocumentTextIcon className="h-5 w-5" />;
-      default: return <DocumentTextIcon className="h-5 w-5" />;
-    }
-  };
-
-  const getTypeBadgeColor = (type) => {
-    switch (type) {
-      case 'performance': return 'blue';
-      case 'goals': return 'green';
-      case 'competency': return 'purple';
-      case '360': return 'orange';
-      default: return 'gray';
-    }
-  };
-
-  const getScoringSystemLabel = (system) => {
-    switch (system) {
-      case '1-5': return '1-5 Scale';
-      case '1-10': return '1-10 Scale';
-      case 'percentage': return 'Percentage';
-      case 'letter': return 'Letter Grades';
-      default: return system;
-    }
-  };
 
   const handleRefresh = async () => {
     if (currentUser?.businessId) {
@@ -263,27 +230,6 @@ const EvaluationTemplatesPage = () => {
         businessId: currentUser.businessId,
         includeInactive: true 
       }));
-    }
-  };
-
-  const handleFixTemplateTypes = async () => {
-    if (!currentUser?.businessId) return;
-    
-    try {
-      console.log('🔧 Starting template migration...');
-      const result = await dispatch(fixTemplateQuestionTypes(currentUser.businessId)).unwrap();
-      
-      alert(`✅ Successfully fixed ${result.fixedCount} templates with missing question types!`);
-      
-      // Refresh templates to show updated data
-      await dispatch(fetchEvaluationTemplates({ 
-        businessId: currentUser.businessId,
-        includeInactive: true 
-      }));
-      
-    } catch (error) {
-      console.error('❌ Migration failed:', error);
-      alert(`❌ Failed to fix template question types: ${error}`);
     }
   };
 
@@ -317,16 +263,6 @@ const EvaluationTemplatesPage = () => {
           </Button>
 
           <Button
-            variant="outline"
-            onClick={handleFixTemplateTypes}
-            disabled={loading}
-            className="inline-flex items-center text-orange-600 hover:text-orange-700 border-orange-300 hover:border-orange-400"
-          >
-            <WrenchScrewdriverIcon className="h-5 w-5 mr-2" />
-            Fix Template Types
-          </Button>
-
-          <Button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center"
           >
@@ -343,28 +279,15 @@ const EvaluationTemplatesPage = () => {
         </div>
       )}
 
-      {/* Filters and Search */}
+      {/* Search */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <Input
-                                    placeholder="Search templates"
+              placeholder="Search templates"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-          </div>
-          <div className="sm:w-48">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            >
-              <option value="all">All Types</option>
-              <option value="performance">Performance Review</option>
-              <option value="goals">Goal Setting</option>
-              <option value="competency">Competency Assessment</option>
-              <option value="360">360 Feedback</option>
-            </select>
           </div>
         </div>
       </Card>
@@ -376,19 +299,17 @@ const EvaluationTemplatesPage = () => {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <div className="flex-shrink-0">
-                  {getTypeIcon(template.type)}
+                  <DocumentTextIcon className="h-5 w-5 text-indigo-500" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900 truncate">
                     {template.name}
                   </h3>
                   <div className="flex items-center space-x-2 mt-1">
-                    <Badge color={getTypeBadgeColor(template.type)} size="sm">
-                      {template.type}
-                    </Badge>
                     <Badge color={template.isActive ? 'green' : 'red'} size="sm">
                       {template.isActive ? 'Active' : 'Inactive'}
                     </Badge>
+                    <span className="text-sm text-gray-500">1-5 Scale</span>
                   </div>
                 </div>
               </div>
@@ -400,12 +321,18 @@ const EvaluationTemplatesPage = () => {
 
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Scoring:</span>
-                <span className="font-medium">{getScoringSystemLabel(template.scoringSystem)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Categories:</span>
                 <span className="font-medium">{template.categories?.length || 0}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Rating Questions:</span>
+                <span className="font-medium">
+                  {template.categories?.reduce((total, cat) => total + (cat.questions?.length || 0), 0) || 0}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Free Text Questions:</span>
+                <span className="font-medium">{template.freeTextQuestions?.length || 0}</span>
               </div>
             </div>
 
@@ -418,15 +345,6 @@ const EvaluationTemplatesPage = () => {
               >
                 <EyeIcon className="h-4 w-4 mr-1" />
                 View
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openTemplateBuilder(template)}
-                className="flex-1"
-              >
-                <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
-                Build
               </Button>
               <Button
                 variant="outline"
@@ -469,78 +387,231 @@ const EvaluationTemplatesPage = () => {
         </div>
       )}
 
-      {/* Create Template Modal */}
+      {/* Create Template Modal - SIMPLIFIED */}
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         title="Create Evaluation Template"
+        maxWidth="4xl"
       >
-        <div className="space-y-4">
-          <Input
-            label="Template Name"
-            value={templateForm.name}
-            onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-            placeholder="Template Name"
-            required
-          />
-          
-          <TextArea
-            label="Description"
-            value={templateForm.description}
-            onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-            placeholder="Template description"
-            rows={3}
-          />
+        <div className="space-y-6">
+          {/* Basic Info */}
+          <div className="space-y-4">
+            <Input
+              label="Template Name"
+              value={templateForm.name}
+              onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+              placeholder="e.g., Annual Performance Review"
+              required
+            />
+            
+            <TextArea
+              label="Description"
+              value={templateForm.description}
+              onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+              placeholder="Brief description of this evaluation template"
+              rows={2}
+            />
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Template Type
-              </label>
-              <select
-                value={templateForm.type}
-                onChange={(e) => setTemplateForm({ ...templateForm, type: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              >
-                <option value="performance">Performance Review</option>
-                <option value="goals">Goal Setting</option>
-                <option value="competency">Competency Assessment</option>
-                <option value="360">360 Feedback</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Scoring System
-              </label>
-              <select
-                value={templateForm.scoringSystem}
-                onChange={(e) => setTemplateForm({ ...templateForm, scoringSystem: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              >
-                <option value="1-5">1-5 Scale</option>
-                <option value="1-10">1-10 Scale</option>
-                <option value="percentage">Percentage</option>
-                <option value="letter">Letter Grades</option>
-              </select>
-            </div>
+            <TextArea
+              label="Instructions (Optional)"
+              value={templateForm.instructions}
+              onChange={(e) => setTemplateForm({ ...templateForm, instructions: e.target.value })}
+              placeholder="Instructions for employees completing this evaluation"
+              rows={2}
+            />
           </div>
 
-          <TextArea
-            label="Instructions (Optional)"
-            value={templateForm.instructions}
-            onChange={(e) => setTemplateForm({ ...templateForm, instructions: e.target.value })}
-            placeholder="Instructions for evaluators"
-            rows={3}
-          />
+          {/* Categories Section */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Categories & Questions</h3>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const newCategory = {
+                    id: Date.now(),
+                    name: '',
+                    weight: 25,
+                    questions: ['']
+                  };
+                  setTemplateForm({
+                    ...templateForm,
+                    categories: [...templateForm.categories, newCategory]
+                  });
+                }}
+              >
+                <PlusIcon className="h-4 w-4 mr-1" />
+                Add Category
+              </Button>
+            </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
+            {templateForm.categories.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <ClipboardDocumentListIcon className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>No categories yet. Add a category to get started.</p>
+              </div>
+            )}
+
+            {templateForm.categories.map((category, categoryIndex) => (
+              <Card key={category.id} className="mb-4 p-4">
+                <div className="space-y-4">
+                  {/* Category Header */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Category name (e.g., Job Performance, Communication)"
+                        value={category.name}
+                        onChange={(e) => {
+                          const newCategories = [...templateForm.categories];
+                          newCategories[categoryIndex].name = e.target.value;
+                          setTemplateForm({ ...templateForm, categories: newCategories });
+                        }}
+                      />
+                    </div>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        placeholder="Weight %"
+                        min="1"
+                        max="100"
+                        value={category.weight}
+                        onChange={(e) => {
+                          const newCategories = [...templateForm.categories];
+                          newCategories[categoryIndex].weight = parseInt(e.target.value) || 0;
+                          setTemplateForm({ ...templateForm, categories: newCategories });
+                        }}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const newCategories = templateForm.categories.filter((_, i) => i !== categoryIndex);
+                        setTemplateForm({ ...templateForm, categories: newCategories });
+                      }}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Questions */}
+                  <div className="pl-4 border-l-2 border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-gray-700">Questions (1-5 rating scale)</label>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const newCategories = [...templateForm.categories];
+                          newCategories[categoryIndex].questions.push('');
+                          setTemplateForm({ ...templateForm, categories: newCategories });
+                        }}
+                      >
+                        <PlusIcon className="h-3 w-3 mr-1" />
+                        Add Question
+                      </Button>
+                    </div>
+                    
+                    {category.questions.map((question, questionIndex) => (
+                      <div key={questionIndex} className="flex items-center space-x-2 mb-2">
+                        <Input
+                          placeholder={`Question ${questionIndex + 1}`}
+                          value={question}
+                          onChange={(e) => {
+                            const newCategories = [...templateForm.categories];
+                            newCategories[categoryIndex].questions[questionIndex] = e.target.value;
+                            setTemplateForm({ ...templateForm, categories: newCategories });
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const newCategories = [...templateForm.categories];
+                            newCategories[categoryIndex].questions = category.questions.filter((_, i) => i !== questionIndex);
+                            setTemplateForm({ ...templateForm, categories: newCategories });
+                          }}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <TrashIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Free Text Questions Section */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Free Text Questions</h3>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setTemplateForm({
+                    ...templateForm,
+                    freeTextQuestions: [...templateForm.freeTextQuestions, '']
+                  });
+                }}
+              >
+                <PlusIcon className="h-4 w-4 mr-1" />
+                Add Free Text Question
+              </Button>
+            </div>
+
+            {templateForm.freeTextQuestions.length === 0 && (
+              <div className="text-center py-6 text-gray-500 bg-gray-50 rounded-md border border-dashed border-gray-300">
+                <DocumentTextIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">No free text questions yet. Add questions for open-ended responses.</p>
+              </div>
+            )}
+
+            {templateForm.freeTextQuestions.map((question, questionIndex) => (
+              <Card key={questionIndex} className="mb-3 p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-1">
+                    <Input
+                      placeholder={`Free text question ${questionIndex + 1} (e.g., What are your key accomplishments?)`}
+                      value={question}
+                      onChange={(e) => {
+                        const newQuestions = [...templateForm.freeTextQuestions];
+                        newQuestions[questionIndex] = e.target.value;
+                        setTemplateForm({ ...templateForm, freeTextQuestions: newQuestions });
+                      }}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const newQuestions = templateForm.freeTextQuestions.filter((_, i) => i !== questionIndex);
+                      setTemplateForm({ ...templateForm, freeTextQuestions: newQuestions });
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Open-ended question - employees will provide text responses
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>
               Cancel
             </Button>
             <Button 
               onClick={handleCreateTemplate}
-              disabled={!templateForm.name.trim()}
+              disabled={!templateForm.name.trim() || (templateForm.categories.length === 0 && templateForm.freeTextQuestions.length === 0)}
             >
               Create Template
             </Button>
@@ -653,10 +724,9 @@ const EvaluationTemplatesPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <div className="flex items-center space-x-2">
-                  {getTypeIcon(selectedTemplate.type)}
-                  <Badge color={getTypeBadgeColor(selectedTemplate.type)}>
-                    {selectedTemplate.type}
-                    {selectedTemplate.type === 'performance' && ' (Dual-Rating)'}
+                  <DocumentTextIcon className="h-5 w-5 text-indigo-500" />
+                  <Badge color="blue">
+                    Evaluation Template
                   </Badge>
                 </div>
               </div>
@@ -668,7 +738,7 @@ const EvaluationTemplatesPage = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Scoring System</label>
-                <p className="text-gray-900">{getScoringSystemLabel(selectedTemplate.scoringSystem)}</p>
+                <p className="text-gray-900">1-5 Scale</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Categories</label>
@@ -830,16 +900,7 @@ const EvaluationTemplatesPage = () => {
         </div>
       </Modal>
 
-      {/* Template Builder */}
-      {showTemplateBuilder && selectedTemplate && (
-        <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
-          <TemplateBuilder
-            template={selectedTemplate}
-            onSave={handleSaveTemplateBuilder}
-            onCancel={handleCancelTemplateBuilder}
-          />
-        </div>
-      )}
+
     </div>
   );
 };

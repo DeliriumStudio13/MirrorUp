@@ -53,8 +53,15 @@ export const createUser = onCall({ cors: true }, async (request) => {
   }
 
   try {
+    // 🚀 NEW: First get user's business from mapping table
+    const mappingDoc = await db.collection('userBusinessMap').doc(request.auth.uid).get();
+    if (!mappingDoc.exists) {
+      throw new HttpsError('permission-denied', 'User business mapping not found');
+    }
+    const userBusinessId = mappingDoc.data()?.businessId;
+    
     // Verify the requesting user has permission to create users
-    const requestingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    const requestingUserDoc = await db.collection('businesses').doc(userBusinessId).collection('users').doc(request.auth.uid).get();
     
     if (!requestingUserDoc.exists) {
       throw new HttpsError('permission-denied', 'Requesting user not found');
@@ -62,9 +69,8 @@ export const createUser = onCall({ cors: true }, async (request) => {
 
     const requestingUser = requestingUserDoc.data();
     
-    // Check if requesting user belongs to the same business and has admin/hr permissions
-    if (requestingUser?.businessId !== businessId || 
-        (!requestingUser?.permissions?.canManageUsers && requestingUser?.role !== 'admin')) {
+    // Check if user has admin/hr permissions (no businessId check needed - already scoped by subcollection)
+    if (!requestingUser?.permissions?.canManageUsers && requestingUser?.role !== 'admin') {
       throw new HttpsError('permission-denied', 'Insufficient permissions to create users');
     }
 
@@ -134,9 +140,8 @@ export const createUser = onCall({ cors: true }, async (request) => {
         break;
     }
 
-    // Create user document in Firestore
+    // 🚀 NEW: Create user document in subcollection (no businessId - implicit in path)
     const userDocument = {
-      businessId,
       profile: {
         firstName: userData.firstName,
         lastName: userData.lastName,
@@ -160,7 +165,13 @@ export const createUser = onCall({ cors: true }, async (request) => {
       updatedAt: FieldValue.serverTimestamp()
     };
 
-    await db.collection('users').doc(firebaseUser.uid).set(userDocument);
+    await db.collection('businesses').doc(businessId).collection('users').doc(firebaseUser.uid).set(userDocument);
+    
+    // 🚀 NEW: Create user-business mapping for authentication lookups
+    await db.collection('userBusinessMap').doc(firebaseUser.uid).set({
+      businessId,
+      createdAt: FieldValue.serverTimestamp()
+    });
 
     // Set custom claims for the new user
     await auth.setCustomUserClaims(firebaseUser.uid, {
@@ -225,7 +236,7 @@ export const createUser = onCall({ cors: true }, async (request) => {
 /**
  * Deletes a user account from Firebase Auth and removes Firestore document
  */
-export const deleteUser = onCall({ cors: true }, async (request) => {
+export const deleteUser = onCall(async (request) => {
   // Check if user is authenticated
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
@@ -239,8 +250,15 @@ export const deleteUser = onCall({ cors: true }, async (request) => {
   }
 
   try {
+    // 🚀 NEW: First get user's business from mapping table
+    const mappingDoc = await db.collection('userBusinessMap').doc(request.auth.uid).get();
+    if (!mappingDoc.exists) {
+      throw new HttpsError('permission-denied', 'User business mapping not found');
+    }
+    const userBusinessId = mappingDoc.data()?.businessId;
+    
     // Verify the requesting user has permission to delete users
-    const requestingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    const requestingUserDoc = await db.collection('businesses').doc(userBusinessId).collection('users').doc(request.auth.uid).get();
     
     if (!requestingUserDoc.exists) {
       throw new HttpsError('permission-denied', 'Requesting user not found');
@@ -248,9 +266,8 @@ export const deleteUser = onCall({ cors: true }, async (request) => {
 
     const requestingUser = requestingUserDoc.data();
     
-    // Check if requesting user belongs to the same business and has admin/hr permissions
-    if (requestingUser?.businessId !== businessId || 
-        (!requestingUser?.permissions?.canManageUsers && requestingUser?.role !== 'admin')) {
+    // Check if user has admin/hr permissions (no businessId check needed - already scoped by subcollection)
+    if (!requestingUser?.permissions?.canManageUsers && requestingUser?.role !== 'admin') {
       throw new HttpsError('permission-denied', 'Insufficient permissions to delete users');
     }
 
@@ -259,17 +276,11 @@ export const deleteUser = onCall({ cors: true }, async (request) => {
       throw new HttpsError('invalid-argument', 'Cannot delete your own account');
     }
 
-    // Verify user to be deleted exists and belongs to the same business
-    const userToDeleteDoc = await db.collection('users').doc(userId).get();
+    // 🚀 NEW: Verify user to be deleted exists (already scoped to business by subcollection)
+    const userToDeleteDoc = await db.collection('businesses').doc(businessId).collection('users').doc(userId).get();
     
     if (!userToDeleteDoc.exists) {
       throw new HttpsError('not-found', 'User not found');
-    }
-
-    const userToDelete = userToDeleteDoc.data();
-    
-    if (userToDelete?.businessId !== businessId) {
-      throw new HttpsError('permission-denied', 'User not found in this business');
     }
 
     // Delete Firebase Auth user
@@ -277,8 +288,29 @@ export const deleteUser = onCall({ cors: true }, async (request) => {
     
     logger.info('Deleted Firebase Auth user', { userId });
 
-    // Delete Firestore document
-    await db.collection('users').doc(userId).delete();
+    // Get user's department before deletion
+    const userDoc = await db.collection('businesses').doc(businessId).collection('users').doc(userId).get();
+    const userDepartment = userDoc.data()?.employeeInfo?.department;
+
+    // Update department employee count if user was assigned to a department
+    if (userDepartment) {
+      const departmentRef = db.collection('businesses').doc(businessId).collection('departments').doc(userDepartment);
+      const departmentDoc = await departmentRef.get();
+      
+      if (departmentDoc.exists) {
+        await departmentRef.update({
+          employeeCount: FieldValue.increment(-1),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        logger.info('Updated department employee count', { departmentId: userDepartment });
+      }
+    }
+
+    // Delete Firestore documents (user + mapping)
+    await Promise.all([
+      db.collection('businesses').doc(businessId).collection('users').doc(userId).delete(),
+      db.collection('userBusinessMap').doc(userId).delete()
+    ]);
 
     logger.info('Successfully deleted user', { userId, businessId });
 

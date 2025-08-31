@@ -141,7 +141,7 @@ const DepartmentsPage = () => {
               )}
               <div className="flex items-center text-sm text-gray-500 mt-2 space-x-4">
                 <span>Manager: {getManagerName(department.manager)}</span>
-                <span>Employees: {department.employeeCount || 0}</span>
+                <span>Employees: {department.employeeCount >= 0 ? department.employeeCount : 0}</span>
                 {level === 0 && department.parentDepartment && (
                   <span className="flex items-center">
                     <ChevronRightIcon className="w-4 h-4 mr-1" />
@@ -300,13 +300,32 @@ const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
     setIsSubmitting(true);
 
     try {
-      await dispatch(createDepartment({
-        departmentData: formData,
+      // Validate required fields
+      if (!formData.name || !formData.name.trim()) {
+        throw new Error('Department name is required');
+      }
+
+      // Clean up form data
+      const cleanedFormData = {
+        name: formData.name.trim(),
+        description: formData.description ? formData.description.trim() : null,
+        parentDepartment: formData.parentDepartment || null,
+        manager: formData.manager || null,
+        budget: formData.budget ? parseFloat(formData.budget) : null,
+        location: formData.location ? formData.location.trim() : null
+      };
+
+      console.log('Creating department with data:', { cleanedFormData, businessId });
+
+      const result = await dispatch(createDepartment({
+        departmentData: cleanedFormData,
         businessId
       })).unwrap();
       
+      console.log('Department created successfully:', result);
+      
       // Refresh the departments list
-      dispatch(fetchDepartments(businessId));
+      await dispatch(fetchDepartments(businessId));
       
       onClose();
       setFormData({
@@ -318,7 +337,8 @@ const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
         location: ''
       });
     } catch (error) {
-      alert('Failed to create department: ' + error);
+      console.error('Failed to create department:', error);
+      alert('Failed to create department: ' + (error.message || error));
     } finally {
       setIsSubmitting(false);
     }
@@ -352,12 +372,12 @@ const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
           placeholder="-- No Parent (Root Department) --"
           options={[
             { value: '', label: '-- No Parent (Root Department) --' },
-            ...buildDepartmentTree(departments, null)
-              .filter(dept => dept.isActive) // Only show active departments
+            ...(departments ? buildDepartmentTree(departments)
+              .filter(dept => dept && dept.isActive) // Only show active departments
               .map(dept => ({
                 value: dept.id,
-                label: dept.displayName
-              }))
+                label: dept.displayName || dept.name
+              })) : [])
           ]}
         />
 
@@ -412,23 +432,50 @@ const AddDepartmentModal = ({ isOpen, onClose, departments, businessId }) => {
 };
 
 // Helper function to build tree structure for dropdown
-const buildDepartmentTree = (departments, excludeId) => {
-  if (!departments) return [];
+const buildDepartmentTree = (departments = [], excludeId) => {
+  // Safety check for null/undefined departments
+  if (!departments || !Array.isArray(departments)) {
+    console.warn('Invalid departments array:', departments);
+    return [];
+  }
   
   const departmentMap = {};
   const roots = [];
   const result = [];
   
-  // Create department map
+  // Create department map - with enhanced null checks
   departments.forEach(dept => {
-    if (dept.id !== excludeId) {
-      departmentMap[dept.id] = { ...dept, children: [] };
+    if (!dept || typeof dept !== 'object') {
+      console.warn('Invalid department:', dept);
+      return;
+    }
+    
+    if (!dept.id || typeof dept.id !== 'string') {
+      console.warn('Department missing valid ID:', dept);
+      return;
+    }
+    
+    if (dept.id === excludeId) {
+      return;
+    }
+
+    try {
+      departmentMap[dept.id] = { 
+        ...dept, 
+        children: [],
+        name: dept.name || 'Unnamed Department',
+        isActive: typeof dept.isActive === 'boolean' ? dept.isActive : true,
+        parentDepartment: dept.parentDepartment || null,
+        displayName: dept.name || 'Unnamed Department'
+      };
+    } catch (error) {
+      console.error('Error processing department:', error, dept);
     }
   });
   
-  // Build parent-child relationships and find roots
+  // Build parent-child relationships and find roots - with null checks
   Object.values(departmentMap).forEach(dept => {
-    if (dept.parentDepartment && departmentMap[dept.parentDepartment]) {
+    if (dept && dept.parentDepartment && departmentMap[dept.parentDepartment]) {
       departmentMap[dept.parentDepartment].children.push(dept);
     } else {
       roots.push(dept);
@@ -437,6 +484,8 @@ const buildDepartmentTree = (departments, excludeId) => {
   
   // Recursive function to flatten tree with visual indicators
   const flattenTree = (dept, level = 0, isLast = true, parentPrefix = '') => {
+    if (!dept || !dept.name) return;
+    
     const indent = '  '.repeat(level);
     const connector = level === 0 ? '' : (isLast ? '└── ' : '├── ');
     const prefix = level === 0 ? '' : parentPrefix + connector;
@@ -447,18 +496,24 @@ const buildDepartmentTree = (departments, excludeId) => {
       level
     });
     
-    // Process children
-    dept.children.forEach((child, index) => {
-      const isLastChild = index === dept.children.length - 1;
-      const childPrefix = level === 0 ? '' : parentPrefix + (isLast ? '    ' : '│   ');
-      flattenTree(child, level + 1, isLastChild, childPrefix);
-    });
+    // Process children - with null checks
+    if (Array.isArray(dept.children)) {
+      dept.children.forEach((child, index) => {
+        if (child) {
+          const isLastChild = index === dept.children.length - 1;
+          const childPrefix = level === 0 ? '' : parentPrefix + (isLast ? '    ' : '│   ');
+          flattenTree(child, level + 1, isLastChild, childPrefix);
+        }
+      });
+    }
   };
   
-  // Process all root departments
+  // Process all root departments - with null checks
   roots.forEach((root, index) => {
-    const isLastRoot = index === roots.length - 1;
-    flattenTree(root, 0, isLastRoot);
+    if (root) {
+      const isLastRoot = index === roots.length - 1;
+      flattenTree(root, 0, isLastRoot);
+    }
   });
   
   return result;

@@ -33,23 +33,54 @@ class DatabaseService {
   /**
    * Get a document reference
    */
-  getDocRef(collectionName, docId) {
-    return doc(db, collectionName, docId);
+  getDocRef(path, docId) {
+    // Handle subcollection paths
+    const segments = path.split('/');
+    if (segments.length === 1) {
+      // Root collection
+      return doc(db, path, docId);
+    } else {
+      // Subcollection path
+      return doc(db, ...segments, docId);
+    }
   }
 
   /**
    * Get a collection reference
    */
-  getCollectionRef(collectionName) {
-    return collection(db, collectionName);
+  getCollectionRef(path) {
+    // Handle subcollection paths
+    const segments = path.split('/');
+    if (segments.length === 1) {
+      // Root collection
+      return collection(db, path);
+    } else {
+      // Subcollection path
+      return collection(db, ...segments);
+    }
+  }
+
+  /**
+   * Get a subcollection path
+   */
+  getSubcollectionPath(parentPath, parentId, subcollectionName) {
+    return `${parentPath}/${parentId}/${subcollectionName}`;
+  }
+
+  /**
+   * Get a business subcollection path
+   */
+  getBusinessSubcollectionPath(businessId, subcollectionName) {
+    return this.getSubcollectionPath('businesses', businessId, subcollectionName);
   }
 
   /**
    * Create a new document
    */
-  async create(collectionName, data) {
+  async create(path, data) {
     try {
-      const docRef = await addDoc(collection(db, collectionName), {
+      const collectionRef = this.getCollectionRef(path);
+      const docRef = await addDoc(collectionRef, {
         ...data,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -61,7 +92,7 @@ class DatabaseService {
         data: { id: docRef.id, ...data }
       };
     } catch (error) {
-      console.error(`Error creating document in ${collectionName}:`, error);
+      console.error(`Error creating document in ${path}:`, error);
       return {
         success: false,
         error: error.message
@@ -72,9 +103,10 @@ class DatabaseService {
   /**
    * Create a document with specific ID
    */
-  async createWithId(collectionName, docId, data) {
+  async createWithId(path, docId, data) {
     try {
-      await setDoc(doc(db, collectionName, docId), {
+      const docRef = this.getDocRef(path, docId);
+      await setDoc(docRef, {
         ...data,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -86,7 +118,7 @@ class DatabaseService {
         data: { id: docId, ...data }
       };
     } catch (error) {
-      console.error(`Error creating document ${docId} in ${collectionName}:`, error);
+      console.error(`Error creating document ${docId} in ${path}:`, error);
       return {
         success: false,
         error: error.message
@@ -97,9 +129,10 @@ class DatabaseService {
   /**
    * Get a single document
    */
-  async getById(collectionName, docId) {
+  async getById(path, docId) {
     try {
-      const docSnap = await getDoc(doc(db, collectionName, docId));
+      const docRef = this.getDocRef(path, docId);
+      const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
         return {
@@ -113,7 +146,7 @@ class DatabaseService {
         };
       }
     } catch (error) {
-      console.error(`Error getting document ${docId} from ${collectionName}:`, error);
+      console.error(`Error getting document ${docId} from ${path}:`, error);
       return {
         success: false,
         error: error.message
@@ -124,9 +157,9 @@ class DatabaseService {
   /**
    * Get multiple documents with optional filters
    */
-  async getMany(collectionName, filters = [], orderByField = null, orderDirection = 'asc', limitCount = null) {
+  async getMany(path, filters = [], orderByField = null, orderDirection = 'asc', limitCount = null) {
     try {
-      let q = collection(db, collectionName);
+      let q = this.getCollectionRef(path);
 
       // Apply where filters
       if (filters.length > 0) {
@@ -158,7 +191,7 @@ class DatabaseService {
         count: docs.length
       };
     } catch (error) {
-      console.error(`Error getting documents from ${collectionName}:`, error);
+      console.error(`Error getting documents from ${path}:`, error);
       return {
         success: false,
         error: error.message,
@@ -170,9 +203,10 @@ class DatabaseService {
   /**
    * Update a document
    */
-  async update(collectionName, docId, data) {
+  async update(path, docId, data) {
     try {
-      await updateDoc(doc(db, collectionName, docId), {
+      const docRef = this.getDocRef(path, docId);
+      await updateDoc(docRef, {
         ...data,
         updatedAt: serverTimestamp()
       });
@@ -182,7 +216,7 @@ class DatabaseService {
         message: 'Document updated successfully'
       };
     } catch (error) {
-      console.error(`Error updating document ${docId} in ${collectionName}:`, error);
+      console.error(`Error updating document ${docId} in ${path}:`, error);
       return {
         success: false,
         error: error.message
@@ -193,16 +227,17 @@ class DatabaseService {
   /**
    * Delete a document
    */
-  async delete(collectionName, docId) {
+  async delete(path, docId) {
     try {
-      await deleteDoc(doc(db, collectionName, docId));
+      const docRef = this.getDocRef(path, docId);
+      await deleteDoc(docRef);
 
       return {
         success: true,
         message: 'Document deleted successfully'
       };
     } catch (error) {
-      console.error(`Error deleting document ${docId} from ${collectionName}:`, error);
+      console.error(`Error deleting document ${docId} from ${path}:`, error);
       return {
         success: false,
         error: error.message
@@ -213,8 +248,8 @@ class DatabaseService {
   /**
    * Soft delete a document (mark as inactive)
    */
-  async softDelete(collectionName, docId) {
-    return this.update(collectionName, docId, { 
+  async softDelete(path, docId) {
+    return this.update(path, docId, { 
       isActive: false,
       deletedAt: serverTimestamp()
     });
@@ -228,8 +263,8 @@ class DatabaseService {
       const batch = writeBatch(db);
 
       operations.forEach(operation => {
-        const { type, collection: collectionName, id, data } = operation;
-        const docRef = doc(db, collectionName, id);
+        const { type, path, id, data } = operation;
+        const docRef = this.getDocRef(path, id);
 
         switch (type) {
           case 'set':
@@ -283,9 +318,9 @@ class DatabaseService {
   /**
    * Listen to real-time updates
    */
-  onSnapshot(collectionName, filters = [], callback, errorCallback = null) {
+  onSnapshot(path, filters = [], callback, errorCallback = null) {
     try {
-      let q = collection(db, collectionName);
+      let q = this.getCollectionRef(path);
 
       // Apply filters
       if (filters.length > 0) {
@@ -295,10 +330,10 @@ class DatabaseService {
       }
 
       return onSnapshot(q, callback, errorCallback || ((error) => {
-        console.error(`Error in snapshot listener for ${collectionName}:`, error);
+        console.error(`Error in snapshot listener for ${path}:`, error);
       }));
     } catch (error) {
-      console.error(`Error setting up snapshot listener for ${collectionName}:`, error);
+      console.error(`Error setting up snapshot listener for ${path}:`, error);
       if (errorCallback) errorCallback(error);
       return () => {}; // Return empty unsubscribe function
     }
@@ -307,14 +342,14 @@ class DatabaseService {
   /**
    * Listen to a single document
    */
-  onDocumentSnapshot(collectionName, docId, callback, errorCallback = null) {
+  onDocumentSnapshot(path, docId, callback, errorCallback = null) {
     try {
-      const docRef = doc(db, collectionName, docId);
+      const docRef = this.getDocRef(path, docId);
       return onSnapshot(docRef, callback, errorCallback || ((error) => {
-        console.error(`Error in document snapshot listener for ${collectionName}/${docId}:`, error);
+        console.error(`Error in document snapshot listener for ${path}/${docId}:`, error);
       }));
     } catch (error) {
-      console.error(`Error setting up document snapshot listener for ${collectionName}/${docId}:`, error);
+      console.error(`Error setting up document snapshot listener for ${path}/${docId}:`, error);
       if (errorCallback) errorCallback(error);
       return () => {}; // Return empty unsubscribe function
     }
@@ -323,7 +358,7 @@ class DatabaseService {
   /**
    * Paginated queries
    */
-  async getPaginated(collectionName, options = {}) {
+  async getPaginated(path, options = {}) {
     try {
       const {
         filters = [],
@@ -334,7 +369,7 @@ class DatabaseService {
         startFromBeginning = true
       } = options;
 
-      let q = collection(db, collectionName);
+      let q = this.getCollectionRef(path);
 
       // Apply filters
       filters.forEach(filter => {
@@ -367,7 +402,7 @@ class DatabaseService {
         hasMore: docs.length === pageSize
       };
     } catch (error) {
-      console.error(`Error in paginated query for ${collectionName}:`, error);
+      console.error(`Error in paginated query for ${path}:`, error);
       return {
         success: false,
         error: error.message,
@@ -378,18 +413,16 @@ class DatabaseService {
   }
 
   /**
-   * Multi-tenant helpers - filter by business ID
+   * Multi-tenant helpers - get business subcollection with pagination
    */
-  async getByBusiness(collectionName, businessId, additionalFilters = [], options = {}) {
-    const filters = [
-      { field: 'businessId', operator: '==', value: businessId },
-      ...additionalFilters
-    ];
+  async getBusinessSubcollection(businessId, subcollectionName, additionalFilters = [], options = {}) {
+    const path = this.getBusinessSubcollectionPath(businessId, subcollectionName);
+    const filters = [...additionalFilters];
 
     if (options.paginated) {
-      return this.getPaginated(collectionName, { ...options, filters });
+      return this.getPaginated(path, { ...options, filters });
     } else {
-      return this.getMany(collectionName, filters, options.orderByField, options.orderDirection, options.limit);
+      return this.getMany(path, filters, options.orderByField, options.orderDirection, options.limit);
     }
   }
 

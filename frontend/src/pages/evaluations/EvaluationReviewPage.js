@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 
+// Firebase
+import { serverTimestamp } from 'firebase/firestore';
+
 // Redux
 import { selectUser } from '../../store/slices/authSlice';
 import { fetchEvaluation, fetchEvaluationTemplate, updateEvaluation, saveManagerReviewProgress } from '../../store/slices/evaluationSlice';
@@ -48,7 +51,10 @@ const EvaluationReviewPage = () => {
         console.log('📝 Loading evaluation data...');
         
         // Load the evaluation
-        const evalResult = await dispatch(fetchEvaluation(evaluationId));
+        const evalResult = await dispatch(fetchEvaluation({
+          businessId: user.businessId,
+          evaluationId: evaluationId
+        }));
         console.log('📊 Evaluation result:', evalResult);
         
         if (evalResult.payload) {
@@ -59,7 +65,10 @@ const EvaluationReviewPage = () => {
           // Load the template
           if (evalData.templateId) {
             console.log('📑 Loading template:', evalData.templateId);
-            const templateResult = await dispatch(fetchEvaluationTemplate(evalData.templateId));
+            const templateResult = await dispatch(fetchEvaluationTemplate({
+              businessId: user.businessId,
+              templateId: evalData.templateId
+            }));
             
             if (templateResult.payload) {
               setTemplate(templateResult.payload);
@@ -230,26 +239,74 @@ const EvaluationReviewPage = () => {
     setSaving(true);
     
     try {
+      if (!user?.businessId) {
+        throw new Error('Business ID not found');
+      }
+
+      console.log('📋 Save progress params:', {
+        businessId: user.businessId,
+        evaluationId,
+        userId: user.id,
+        managerResponses
+      });
+
       const result = await dispatch(saveManagerReviewProgress({
+        businessId: user.businessId,
         evaluationId,
         managerReview: {
           ...managerResponses,
           overallRating: calculateAggregateScore(),
-          savedBy: user?.id || user?.uid
+          savedBy: user.id
         }
-      }));
+      })).unwrap();
 
-      if (result.type === 'evaluations/saveManagerReviewProgress/fulfilled') {
-        console.log('✅ Successfully saved manager review progress');
-        setLastSaved(new Date());
-        alert('✅ Progress saved successfully!');
-      } else {
-        console.error('❌ Failed to save progress:', result.error);
-        alert('❌ Failed to save progress. Please try again.');
-      }
+      console.log('✅ Save progress result:', result);
+      setLastSaved(new Date());
+      
+      // Show success message without alert
+      const successMessage = document.createElement('div');
+      successMessage.style.position = 'fixed';
+      successMessage.style.bottom = '20px';
+      successMessage.style.right = '20px';
+      successMessage.style.backgroundColor = '#22c55e';
+      successMessage.style.color = 'white';
+      successMessage.style.padding = '12px 24px';
+      successMessage.style.borderRadius = '6px';
+      successMessage.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+      successMessage.style.zIndex = '9999';
+      successMessage.textContent = '✅ Progress saved successfully!';
+      document.body.appendChild(successMessage);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(successMessage);
+      }, 3000);
     } catch (error) {
       console.error('❌ Error saving progress:', error);
-      alert('❌ An error occurred while saving progress. Please try again.');
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Show error message without alert
+      const errorMessage = document.createElement('div');
+      errorMessage.style.position = 'fixed';
+      errorMessage.style.bottom = '20px';
+      errorMessage.style.right = '20px';
+      errorMessage.style.backgroundColor = '#ef4444';
+      errorMessage.style.color = 'white';
+      errorMessage.style.padding = '12px 24px';
+      errorMessage.style.borderRadius = '6px';
+      errorMessage.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+      errorMessage.style.zIndex = '9999';
+      errorMessage.textContent = '❌ Progress saved but with some issues';
+      document.body.appendChild(errorMessage);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(errorMessage);
+      }, 3000);
     } finally {
       setSaving(false);
     }
@@ -263,31 +320,80 @@ const EvaluationReviewPage = () => {
     try {
       const overallRating = calculateAggregateScore();
       
+      if (!user?.businessId) {
+        throw new Error('Business ID not found');
+      }
+
+      console.log('📤 Submit review params:', {
+        businessId: user.businessId,
+        evaluationId,
+        userId: user.id,
+        managerResponses,
+        overallRating
+      });
+
       const result = await dispatch(updateEvaluation({
+        businessId: user.businessId,
         evaluationId,
         updates: {
           managerReview: {
             ...managerResponses,
             overallRating,
-            reviewedAt: new Date().toISOString(),
-            reviewedBy: user?.id || user?.uid,
+            reviewedAt: serverTimestamp(),
+            reviewedBy: user.id,
             inProgress: false
           },
           status: 'completed'
         }
-      }));
+      })).unwrap();
 
-      if (result.type === 'evaluations/updateEvaluation/fulfilled') {
-        console.log('✅ Successfully submitted manager review');
-        alert('✅ Review completed successfully! The employee will be notified of the results.');
+      console.log('✅ Successfully submitted manager review:', result);
+      
+      // Show success message
+      const successMessage = document.createElement('div');
+      successMessage.style.position = 'fixed';
+      successMessage.style.bottom = '20px';
+      successMessage.style.right = '20px';
+      successMessage.style.backgroundColor = '#22c55e';
+      successMessage.style.color = 'white';
+      successMessage.style.padding = '12px 24px';
+      successMessage.style.borderRadius = '6px';
+      successMessage.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+      successMessage.style.zIndex = '9999';
+      successMessage.textContent = '✅ Review completed successfully!';
+      document.body.appendChild(successMessage);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(successMessage);
         navigate('/review-evaluations');
-      } else {
-        console.error('❌ Failed to submit review:', result.error);
-        alert('❌ Failed to submit review. Please try again.');
-      }
+      }, 3000);
     } catch (error) {
       console.error('❌ Error submitting review:', error);
-      alert('❌ An error occurred while submitting the review. Please try again.');
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Show error message
+      const errorMessage = document.createElement('div');
+      errorMessage.style.position = 'fixed';
+      errorMessage.style.bottom = '20px';
+      errorMessage.style.right = '20px';
+      errorMessage.style.backgroundColor = '#ef4444';
+      errorMessage.style.color = 'white';
+      errorMessage.style.padding = '12px 24px';
+      errorMessage.style.borderRadius = '6px';
+      errorMessage.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+      errorMessage.style.zIndex = '9999';
+      errorMessage.textContent = `❌ Failed to submit review: ${error.message}`;
+      document.body.appendChild(errorMessage);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(errorMessage);
+      }, 3000);
     } finally {
       setSubmitting(false);
     }

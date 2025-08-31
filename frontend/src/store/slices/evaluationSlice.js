@@ -16,6 +16,32 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
+// Helper function to safely convert Firebase Timestamps to ISO strings
+const convertTimestamp = (timestamp) => {
+  if (!timestamp) return null;
+  if (typeof timestamp === 'string') return timestamp;
+  return timestamp.toDate ? timestamp.toDate().toISOString() : null;
+};
+
+// Helper function to convert all timestamp fields in data
+const convertTimestampsInData = (data) => {
+  if (!data) return {};
+  return {
+    ...data,
+    createdAt: convertTimestamp(data.createdAt),
+    updatedAt: convertTimestamp(data.updatedAt),
+    submittedAt: convertTimestamp(data.submittedAt),
+    dueDate: convertTimestamp(data.dueDate),
+    assignedDate: convertTimestamp(data.assignedDate),
+    // Also convert timestamps in nested objects
+    managerReview: data.managerReview ? {
+      ...data.managerReview,
+      lastSavedAt: convertTimestamp(data.managerReview.lastSavedAt),
+      reviewedAt: convertTimestamp(data.managerReview.reviewedAt)
+    } : null
+  };
+};
+
 const initialState = {
   evaluations: [],
   templates: [],
@@ -25,8 +51,7 @@ const initialState = {
     currentPage: 1,
     totalPages: 0,
     totalItems: 0,
-    pageSize: 10,
-    lastVisible: null
+    pageSize: 10
   },
   filters: {
     status: 'all',
@@ -45,47 +70,45 @@ export const fetchEvaluations = createAsyncThunk(
   'evaluations/fetchEvaluations',
   async ({ businessId, filters = {}, page = 1, pageSize = 10 }, { rejectWithValue }) => {
     try {
-      let evaluationQuery = query(
-        collection(db, 'evaluations'),
-        where('businessId', '==', businessId),
-        orderBy('createdAt', 'desc')
+      // Simple collection query without any filters
+      const evaluationQuery = query(
+        collection(db, 'businesses', businessId, 'evaluations')
       );
 
-      // Apply filters
-      if (filters.status && filters.status !== 'all') {
-        evaluationQuery = query(evaluationQuery, where('status', '==', filters.status));
-      }
-
-      if (filters.evaluatee && filters.evaluatee !== 'all') {
-        evaluationQuery = query(evaluationQuery, where('evaluateeId', '==', filters.evaluatee));
-      }
-
-      if (filters.evaluator && filters.evaluator !== 'all') {
-        evaluationQuery = query(evaluationQuery, where('evaluatorId', '==', filters.evaluator));
-      }
-
-      // Pagination
-      if (page > 1 && filters.lastVisible) {
-        evaluationQuery = query(evaluationQuery, startAfter(filters.lastVisible));
-      }
-
-      evaluationQuery = query(evaluationQuery, limit(pageSize));
-
       const querySnapshot = await getDocs(evaluationQuery);
-      const evaluations = [];
-      let lastVisible = null;
+      let evaluations = [];
 
+      // Client-side filtering
       querySnapshot.forEach((doc) => {
-        evaluations.push({ id: doc.id, ...doc.data() });
-        lastVisible = doc;
+        const data = doc.data();
+        const evaluation = { 
+          id: doc.id, 
+          ...convertTimestampsInData(data)
+        };
+        
+        // Apply all filters client-side
+        if (
+          // Status filter
+          (!filters.status || filters.status === 'all' || evaluation.status === filters.status) &&
+          // Evaluatee filter
+          (!filters.evaluatee || filters.evaluatee === 'all' || evaluation.evaluateeId === filters.evaluatee) &&
+          // Evaluator filter
+          (!filters.evaluator || filters.evaluator === 'all' || evaluation.evaluatorId === filters.evaluator)
+        ) {
+          evaluations.push(evaluation);
+        }
       });
 
+      // Apply client-side pagination
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedEvaluations = evaluations.slice(startIndex, endIndex);
+
       return {
-        evaluations,
+        evaluations: paginatedEvaluations,
         page,
         pageSize,
-        hasMore: evaluations.length === pageSize,
-        lastVisible
+        hasMore: endIndex < evaluations.length
       };
     } catch (error) {
       return rejectWithValue(error.message);
@@ -95,15 +118,20 @@ export const fetchEvaluations = createAsyncThunk(
 
 export const fetchEvaluation = createAsyncThunk(
   'evaluations/fetchEvaluation',
-  async (evaluationId, { rejectWithValue }) => {
+  async ({ businessId, evaluationId }, { rejectWithValue }) => {
     try {
-      const evaluationDoc = await getDoc(doc(db, 'evaluations', evaluationId));
+      // 🚀 NEW: Use subcollection path
+      const evaluationDoc = await getDoc(doc(db, 'businesses', businessId, 'evaluations', evaluationId));
       
       if (!evaluationDoc.exists()) {
         throw new Error('Evaluation not found');
       }
 
-      return { id: evaluationDoc.id, ...evaluationDoc.data() };
+      const data = evaluationDoc.data();
+      return { 
+        id: evaluationDoc.id, 
+        ...convertTimestampsInData(data)
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -112,17 +140,43 @@ export const fetchEvaluation = createAsyncThunk(
 
 export const createEvaluation = createAsyncThunk(
   'evaluations/createEvaluation',
-  async (evaluationData, { rejectWithValue }) => {
+  async ({ businessId, ...evaluationData }, { rejectWithValue, getState }) => {
     try {
-      const docRef = await addDoc(collection(db, 'evaluations'), {
+      // Check if there's a valid assignment for this evaluation
+      const assignmentsRef = collection(db, 'businesses', businessId, 'evaluationAssignments');
+      const assignmentQuery = query(
+        assignmentsRef,
+        where('evaluatorId', '==', evaluationData.evaluatorId),
+        where('evaluateeId', '==', evaluationData.evaluateeId),
+        where('active', '==', true)
+      );
+
+      const assignmentSnapshot = await getDocs(assignmentQuery);
+      if (assignmentSnapshot.empty) {
+        throw new Error('No valid assignment found for this evaluation. Please check assignments in Assignment Management.');
+      }
+
+      // 🚀 NEW: Use subcollection - businessId not stored in document
+      const docRef = await addDoc(collection(db, 'businesses', businessId, 'evaluations'), {
         ...evaluationData,
+        assignmentId: assignmentSnapshot.docs[0].id, // Store the assignment ID
         status: 'draft',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
 
       const createdDoc = await getDoc(docRef);
-      return { id: createdDoc.id, ...createdDoc.data() };
+      const data = createdDoc.data();
+      return { 
+        id: createdDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        submittedAt: data.submittedAt?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -131,18 +185,54 @@ export const createEvaluation = createAsyncThunk(
 
 export const updateEvaluation = createAsyncThunk(
   'evaluations/updateEvaluation',
-  async ({ evaluationId, updates }, { rejectWithValue }) => {
+  async ({ businessId, evaluationId, updates }, { rejectWithValue }) => {
     try {
-      const evaluationRef = doc(db, 'evaluations', evaluationId);
-      
-      await updateDoc(evaluationRef, {
-        ...updates,
-        updatedAt: serverTimestamp()
+      console.log('🔄 Updating evaluation:', {
+        businessId,
+        evaluationId,
+        updates
       });
 
+      // 🚀 NEW: Use subcollection path
+      const evaluationRef = doc(db, 'businesses', businessId, 'evaluations', evaluationId);
+      
+      // Get current evaluation to preserve existing data
+      const currentDoc = await getDoc(evaluationRef);
+      if (!currentDoc.exists()) {
+        throw new Error('Evaluation not found');
+      }
+
+      const currentData = currentDoc.data();
+      console.log('📋 Current evaluation data:', currentData);
+
+      // Merge with existing data
+      const updatedData = {
+        ...currentData,
+        ...updates,
+        updatedAt: serverTimestamp()
+      };
+
+      console.log('📝 Updated evaluation data:', updatedData);
+
+      // Update the document
+      await updateDoc(evaluationRef, updatedData);
+
+      console.log('✅ Successfully updated evaluation');
+
+      // Get the updated document
       const updatedDoc = await getDoc(evaluationRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return { 
+        id: updatedDoc.id, 
+        ...convertTimestampsInData(data)
+      };
     } catch (error) {
+      console.error('❌ Error updating evaluation:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
       return rejectWithValue(error.message);
     }
   }
@@ -150,9 +240,10 @@ export const updateEvaluation = createAsyncThunk(
 
 export const deleteEvaluation = createAsyncThunk(
   'evaluations/deleteEvaluation',
-  async (evaluationId, { rejectWithValue }) => {
+  async ({ businessId, evaluationId }, { rejectWithValue }) => {
     try {
-      await deleteDoc(doc(db, 'evaluations', evaluationId));
+      // 🚀 NEW: Use subcollection path
+      await deleteDoc(doc(db, 'businesses', businessId, 'evaluations', evaluationId));
       return evaluationId;
     } catch (error) {
       return rejectWithValue(error.message);
@@ -162,34 +253,110 @@ export const deleteEvaluation = createAsyncThunk(
 
 export const saveEvaluationProgress = createAsyncThunk(
   'evaluations/saveEvaluationProgress',
-  async ({ evaluationId, responses }, { rejectWithValue }) => {
+  async ({ businessId, evaluationId, responses }, { rejectWithValue }) => {
     try {
-      const evaluationRef = doc(db, 'evaluations', evaluationId);
+      console.log('🔄 Saving evaluation progress for ID:', evaluationId);
+      console.log('📝 Raw responses object:', responses);
       
-      await updateDoc(evaluationRef, {
-        responses: {
-          selfAssessment: {
-            ...responses,
-            lastSavedAt: new Date().toISOString()
-          }
-        },
-        status: 'in-progress',
-        updatedAt: serverTimestamp()
-      });
+      // 🚀 NEW: Use subcollection path
+      const evaluationRef = doc(db, 'businesses', businessId, 'evaluations', evaluationId);
+      
+      // DEBUG: Check the current evaluation document to understand permission issue
+      console.log('🔍 DEBUGGING: Checking current evaluation document...');
+      const currentDoc = await getDoc(evaluationRef);
+      if (currentDoc.exists()) {
+        const currentData = currentDoc.data();
+        console.log('📋 Current evaluation data:', {
+          evaluateeId: currentData.evaluateeId,
+          evaluatorId: currentData.evaluatorId, 
+          status: currentData.status,
+          businessId: currentData.businessId,
+          createdBy: currentData.createdBy
+        });
+        console.log('👤 Current user trying to save:', responses.savedBy);
+        console.log('✅ Permission check results:', {
+          isEvaluatee: currentData.evaluateeId === responses.savedBy,
+          isEvaluator: currentData.evaluatorId === responses.savedBy,
+          currentStatus: currentData.status,
+          statusAllowsUpdate: ['draft', 'in-progress'].includes(currentData.status)
+        });
+      } else {
+        console.log('❌ Evaluation document does not exist!');
+      }
+      
+      // Build complete responses object - same pattern as submitEvaluation
+      const completeResponses = {
+        selfAssessment: {
+          freeTextQuestions: responses.freeTextQuestions || {},
+          categoryResponses: responses.categoryResponses || {},
+          savedBy: responses.savedBy,
+          lastSavedAt: new Date().toISOString()
+        }
+      };
+      
+      console.log('🧹 Complete responses structure:', JSON.stringify(completeResponses, null, 2));
+      
+      // Try ultra-minimal update first
+      console.log('🚀 Attempting minimal update...');
+      
+      try {
+        // First try: Just update status (this should always work)
+        await updateDoc(evaluationRef, {
+          status: 'in-progress'
+        });
+        console.log('✅ Status update successful');
+        
+        // Second try: Add responses
+        await updateDoc(evaluationRef, {
+          responses: completeResponses,
+          status: 'in-progress'
+        });
+        console.log('✅ Responses update successful');
+        
+      } catch (minimalError) {
+        console.error('❌ Even minimal update failed:', minimalError);
+        
+        // Fallback: Try the original pattern
+        await updateDoc(evaluationRef, {
+          responses: completeResponses,
+          status: 'in-progress',
+          updatedAt: serverTimestamp()
+        });
+      }
+      
+      console.log('✅ Firebase update successful');
 
+      // Get the updated document
       const updatedDoc = await getDoc(evaluationRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return { 
+        id: updatedDoc.id, 
+        ...convertTimestampsInData(data)
+      };
     } catch (error) {
-      return rejectWithValue(error.message);
+      console.error('❌ DETAILED Save error:', error);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+      
+      // Also log what we were trying to save
+      console.error('❌ Attempted to save:', {
+        evaluationId,
+        responses,
+        userId: responses.savedBy
+      });
+      
+      return rejectWithValue(`${error.code}: ${error.message}`);
     }
   }
 );
 
 export const submitEvaluation = createAsyncThunk(
   'evaluations/submitEvaluation',
-  async ({ evaluationId, responses }, { rejectWithValue }) => {
+  async ({ businessId, evaluationId, responses }, { rejectWithValue }) => {
     try {
-      const evaluationRef = doc(db, 'evaluations', evaluationId);
+      // 🚀 NEW: Use subcollection path
+      const evaluationRef = doc(db, 'businesses', businessId, 'evaluations', evaluationId);
       
       await updateDoc(evaluationRef, {
         responses,
@@ -199,7 +366,17 @@ export const submitEvaluation = createAsyncThunk(
       });
 
       const updatedDoc = await getDoc(evaluationRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return { 
+        id: updatedDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        submittedAt: data.submittedAt?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -208,23 +385,67 @@ export const submitEvaluation = createAsyncThunk(
 
 export const saveManagerReviewProgress = createAsyncThunk(
   'evaluations/saveManagerReviewProgress',
-  async ({ evaluationId, managerReview }, { rejectWithValue }) => {
+  async ({ businessId, evaluationId, managerReview }, { rejectWithValue }) => {
     try {
-      const evaluationRef = doc(db, 'evaluations', evaluationId);
+      console.log('🔄 Saving manager review progress:', {
+        businessId,
+        evaluationId,
+        managerReview
+      });
+
+      // 🚀 NEW: Use subcollection path
+      const evaluationRef = doc(db, 'businesses', businessId, 'evaluations', evaluationId);
       
+      // Get current evaluation to preserve existing data
+      const currentDoc = await getDoc(evaluationRef);
+      if (!currentDoc.exists()) {
+        throw new Error('Evaluation not found');
+      }
+
+      const currentData = currentDoc.data();
+      console.log('📋 Current evaluation data:', currentData);
+
+      // Convert any ISO strings to Firestore timestamps
+      const currentManagerReview = currentData.managerReview || {};
+      
+      // Merge with existing manager review data
+      const updatedManagerReview = {
+        ...currentManagerReview,
+        ...managerReview,
+        lastSavedAt: serverTimestamp(),
+        inProgress: true
+      };
+
+      console.log('📝 Updated manager review:', updatedManagerReview);
+
+      // Update the document
       await updateDoc(evaluationRef, {
-        managerReview: {
-          ...managerReview,
-          lastSavedAt: new Date().toISOString(),
-          inProgress: true
-        },
+        managerReview: updatedManagerReview,
         updatedAt: serverTimestamp()
       });
 
+      console.log('✅ Successfully updated evaluation');
+
+      // Get the updated document
       const updatedDoc = await getDoc(evaluationRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return { 
+        id: updatedDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        submittedAt: data.submittedAt?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
-      console.error('Error saving manager review progress:', error);
+      console.error('❌ Error saving manager review progress:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
       return rejectWithValue(error.message);
     }
   }
@@ -235,22 +456,18 @@ export const fetchEvaluationTemplates = createAsyncThunk(
   'evaluations/fetchEvaluationTemplates',
   async ({ businessId, includeInactive = false }, { rejectWithValue }) => {
     try {
-      // Simplified query to work while indexes are building
-      let templateQuery = query(
-        collection(db, 'evaluationTemplates'),
-        where('businessId', '==', businessId)
+      // Simple collection query without any filters
+      const templateQuery = query(
+        collection(db, 'businesses', businessId, 'evaluationTemplates')
       );
-      
-      // We'll filter isActive in JavaScript temporarily
-      // Once indexes are ready, we can restore the orderBy('name') query
 
       const querySnapshot = await getDocs(templateQuery);
-      const templates = [];
+      let templates = [];
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         
-        // Filter in JavaScript while indexes are building
+        // Client-side filtering for active status
         if (!includeInactive && !data.isActive) {
           return; // Skip inactive templates if not including them
         }
@@ -264,7 +481,7 @@ export const fetchEvaluationTemplates = createAsyncThunk(
         });
       });
       
-      // Sort by name in JavaScript temporarily
+      // Client-side sorting by name
       templates.sort((a, b) => a.name.localeCompare(b.name));
 
       return templates;
@@ -275,16 +492,24 @@ export const fetchEvaluationTemplates = createAsyncThunk(
 );
 
 export const fetchEvaluationTemplate = createAsyncThunk(
-  'evaluations/fetchEvaluationTemplate',
-  async (templateId, { rejectWithValue }) => {
+  'evaluations/fetchEvaluationTemplate',  
+  async ({ businessId, templateId }, { rejectWithValue }) => {
     try {
-      const templateDoc = await getDoc(doc(db, 'evaluationTemplates', templateId));
+      // 🚀 NEW: Use subcollection path
+      const templateDoc = await getDoc(doc(db, 'businesses', businessId, 'evaluationTemplates', templateId));
       
       if (!templateDoc.exists()) {
         throw new Error('Template not found');
       }
 
-      return { id: templateDoc.id, ...templateDoc.data() };
+      const data = templateDoc.data();
+      return { 
+        id: templateDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -293,9 +518,10 @@ export const fetchEvaluationTemplate = createAsyncThunk(
 
 export const createEvaluationTemplate = createAsyncThunk(
   'evaluations/createEvaluationTemplate',
-  async (templateData, { rejectWithValue }) => {
+  async ({ businessId, ...templateData }, { rejectWithValue }) => {
     try {
-      const docRef = await addDoc(collection(db, 'evaluationTemplates'), {
+      // 🚀 NEW: Use subcollection - businessId not stored in document
+      const docRef = await addDoc(collection(db, 'businesses', businessId, 'evaluationTemplates'), {
         ...templateData,
         isActive: true,
         createdAt: serverTimestamp(),
@@ -318,9 +544,10 @@ export const createEvaluationTemplate = createAsyncThunk(
 
 export const updateEvaluationTemplate = createAsyncThunk(
   'evaluations/updateEvaluationTemplate',
-  async ({ templateId, updates }, { rejectWithValue }) => {
+  async ({ businessId, templateId, updates }, { rejectWithValue }) => {
     try {
-      const templateRef = doc(db, 'evaluationTemplates', templateId);
+      // 🚀 NEW: Use subcollection path
+      const templateRef = doc(db, 'businesses', businessId, 'evaluationTemplates', templateId);
       
       await updateDoc(templateRef, {
         ...updates,
@@ -337,9 +564,10 @@ export const updateEvaluationTemplate = createAsyncThunk(
 
 export const deleteEvaluationTemplate = createAsyncThunk(
   'evaluations/deleteEvaluationTemplate',
-  async (templateId, { rejectWithValue }) => {
+  async ({ businessId, templateId }, { rejectWithValue }) => {
     try {
-      const templateRef = doc(db, 'evaluationTemplates', templateId);
+      // 🚀 NEW: Use subcollection path
+      const templateRef = doc(db, 'businesses', businessId, 'evaluationTemplates', templateId);
       
       // Actually delete the document from Firestore permanently
       await deleteDoc(templateRef);
@@ -582,6 +810,55 @@ export const selectEvaluationsLoading = (state) => state.evaluations.isLoading;
 export const selectTemplatesLoading = (state) => state.evaluations.templatesLoading;
 export const selectEvaluationsError = (state) => state.evaluations.error;
 
+// Evaluation migration utility
+export const fixEvaluationAssignedBy = createAsyncThunk(
+  'evaluations/fixEvaluationAssignedBy',
+  async (businessId, { rejectWithValue }) => {
+    try {
+      console.log('🔧 Starting evaluation assignedBy migration for business:', businessId);
+      
+      // Get all evaluations
+      const evaluationsRef = collection(db, 'businesses', businessId, 'evaluations');
+      const q = query(evaluationsRef);
+      const querySnapshot = await getDocs(q);
+      
+      let fixedCount = 0;
+      
+      // Get all users to map IDs to names
+      const usersRef = collection(db, 'businesses', businessId, 'users');
+      const usersSnapshot = await getDocs(usersRef);
+      const userMap = {};
+      usersSnapshot.forEach(doc => {
+        const data = doc.data();
+        userMap[doc.id] = `${data.profile?.firstName || ''} ${data.profile?.lastName || ''}`.trim();
+      });
+      
+      for (const docSnapshot of querySnapshot.docs) {
+        const evaluation = docSnapshot.data();
+        
+        // Check if assignedBy is a user ID
+        if (evaluation.assignedBy && userMap[evaluation.assignedBy]) {
+          console.log(`🔧 Fixing assignedBy for evaluation ${docSnapshot.id}`);
+          
+          await updateDoc(docSnapshot.ref, {
+            assignedBy: userMap[evaluation.assignedBy],
+            updatedAt: serverTimestamp()
+          });
+          
+          fixedCount++;
+        }
+      }
+      
+      console.log(`✅ Fixed ${fixedCount} evaluations with ID-based assignedBy`);
+      return { fixedCount };
+      
+    } catch (error) {
+      console.error('❌ Error fixing evaluation assignedBy:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 // Template migration utility
 export const fixTemplateQuestionTypes = createAsyncThunk(
   'evaluations/fixTemplateQuestionTypes',
@@ -589,8 +866,9 @@ export const fixTemplateQuestionTypes = createAsyncThunk(
     try {
       console.log('🔧 Starting template question type migration for business:', businessId);
       
-      const templatesRef = collection(db, 'evaluationTemplates');
-      const q = query(templatesRef, where('businessId', '==', businessId));
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
+      const templatesRef = collection(db, 'businesses', businessId, 'evaluationTemplates');
+      const q = query(templatesRef);
       const querySnapshot = await getDocs(q);
       
       let fixedCount = 0;
@@ -622,7 +900,8 @@ export const fixTemplateQuestionTypes = createAsyncThunk(
         // If template needs update, save it
         if (needsUpdate) {
           console.log('🔧 Updating template:', template.name);
-          const templateRef = doc(db, 'evaluationTemplates', docSnapshot.id);
+          // 🚀 NEW: Use subcollection path
+          const templateRef = doc(db, 'businesses', businessId, 'evaluationTemplates', docSnapshot.id);
           await updateDoc(templateRef, {
             categories: updatedCategories,
             updatedAt: serverTimestamp()

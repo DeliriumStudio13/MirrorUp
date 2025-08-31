@@ -64,15 +64,15 @@ class FunctionsService {
    * User Management Functions
    */
   async createUser(userData) {
-    return this.call('createUser', userData);
+    return this.call('userCreateUser', userData);
   }
 
   async updateUserRole(userId, role) {
     return this.call('updateUserRole', { userId, role });
   }
 
-  async deleteUser(userId) {
-    return this.call('deleteUser', { userId });
+  async deleteUser(userId, businessId) {
+    return this.call('userDeleteUser', { userId, businessId });
   }
 
   async inviteUser(inviteData) {
@@ -87,15 +87,15 @@ class FunctionsService {
    * Department Management Functions
    */
   async createDepartment(departmentData) {
-    return this.call('createDepartment', departmentData);
+    return this.call('departmentCreateDepartment', departmentData);
   }
 
   async updateDepartment(departmentId, updates) {
-    return this.call('updateDepartment', { departmentId, updates });
+    return this.call('departmentUpdateDepartment', { departmentId, updates });
   }
 
   async deleteDepartment(departmentId) {
-    return this.call('deleteDepartment', { departmentId });
+    return this.call('departmentDeleteDepartment', { departmentId });
   }
 
   /**

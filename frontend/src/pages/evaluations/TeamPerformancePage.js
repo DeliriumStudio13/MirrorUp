@@ -86,8 +86,9 @@ const TeamPerformancePage = () => {
       
       for (const deptId of uniqueDepartments) {
         try {
+          // 🚀 NEW: Use subcollection path (assuming bonusAllocations maps to bonusCalculations)
           const allocationDoc = await getDoc(
-            doc(db, 'bonusAllocations', `${deptId}_${currentYear}`)
+            doc(db, 'businesses', user.businessId, 'bonusCalculations', `${deptId}_${currentYear}`)
           );
           
           if (allocationDoc.exists()) {

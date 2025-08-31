@@ -72,10 +72,24 @@ const AssignEvaluationsPage = () => {
         console.log('🏢 Departments loaded:', departmentsResult.payload?.length || 0);
         
         // Fetch both evaluation and bonus assignments to ensure complete data
+        console.log('👤 Current user role for assignments:', user?.role);
+        console.log('🏢 Business ID for assignments:', user?.businessId);
+        
         const [evalAssignmentsResult, bonusAssignmentsResult] = await Promise.all([
           dispatch(fetchEvaluationAssignments(user?.businessId)),
           dispatch(fetchBonusAssignments(user?.businessId))
         ]);
+        
+        console.log('📋 Evaluation assignments result:', evalAssignmentsResult);
+        console.log('💰 Bonus assignments result:', bonusAssignmentsResult);
+        
+        // Check for permission errors specifically
+        if (evalAssignmentsResult.type?.includes('rejected')) {
+          console.error('❌ Evaluation assignments REJECTED:', evalAssignmentsResult.error || evalAssignmentsResult.payload);
+        }
+        if (bonusAssignmentsResult.type?.includes('rejected')) {
+          console.error('❌ Bonus assignments REJECTED:', bonusAssignmentsResult.error || bonusAssignmentsResult.payload);
+        }
 
         
       } catch (error) {
@@ -96,20 +110,27 @@ const AssignEvaluationsPage = () => {
   }, [dispatch, searchParams, user?.businessId]);
 
   useEffect(() => {
-
+    console.log('🔍 Filtering team members...');
+    console.log('👥 All users count:', users?.length || 0);
+    console.log('📋 My assignments:', myAssignments);
+    console.log('📋 My assignments count:', myAssignments?.length || 0);
     
     if (users && user && myAssignments) {
       // Filter team members based on evaluation assignments
-      const assignedUserIds = myAssignments.map(assignment => assignment.evaluateeId);
+      const assignedUserIds = myAssignments?.map(assignment => assignment.evaluateeId) || [];
+      console.log('🎯 Assigned user IDs:', assignedUserIds);
       
       const filteredUsers = users.filter(u => {
         // Don't include self
         if (u.id === user.id) return false;
         
         // Include users who are assigned to be evaluated by the current user
-        return assignedUserIds.includes(u.id);
+        const isAssigned = assignedUserIds.includes(u.id);
+        console.log(`👤 User ${u.profile?.firstName} (${u.id}): assigned=${isAssigned}`);
+        return isAssigned;
       });
       
+      console.log('✅ Filtered team members:', filteredUsers?.length || 0);
       setTeamMembers(filteredUsers);
     } else if (users && user && myAssignments?.length === 0) {
       // No assignments found - show empty list
@@ -153,11 +174,13 @@ const AssignEvaluationsPage = () => {
       return;
     }
 
-    const managerId = user?.uid || user?.id;
+    const managerId = user?.id;
     if (!managerId) {
       alert('Error: Unable to identify manager. Please try logging in again.');
       return;
     }
+    
+    console.log('Creating evaluations with manager ID:', managerId);
 
     setLoading(true);
     
@@ -177,24 +200,47 @@ const AssignEvaluationsPage = () => {
         try {
           console.log(`🔨 Creating evaluation for user: ${userId}`);
           
+          // 🚀 NEW: No businessId in document - it's implicit in the subcollection path!
+          // Get template data
+          const template = {
+            id: selectedTemplate.id,
+            name: selectedTemplate.name,
+            type: selectedTemplate.type || 'annual_review',
+            scoringSystem: selectedTemplate.scoringSystem || '1-5',
+            categories: selectedTemplate.categories || [],
+            freeTextQuestions: selectedTemplate.freeTextQuestions || []
+          };
+
+          // Create evaluation object with safe defaults
           const evaluation = {
-            businessId: user.businessId,
-            templateId: selectedTemplate.id,
-            templateName: selectedTemplate.name,
-            templateType: selectedTemplate.type || 'annual_review',
-            scoringSystem: selectedTemplate.scoringSystem || '1-5', // Store scoring system for later use
-            evaluateeId: userId,
-            evaluatorId: managerId,
-            assignedBy: `${user.profile?.firstName || user.firstName} ${user.profile?.lastName || user.lastName || ''}`.trim() || user.email,
+            // Template info
+            templateId: template?.id || '',
+            templateName: template?.name || '',
+            templateType: template?.type || 'annual_review',
+            scoringSystem: template?.scoringSystem || '1-5',
+            categories: template?.categories || [],
+            freeTextQuestions: template?.freeTextQuestions || [],
+
+            // Assignment info
+            evaluateeId: userId || '',
+            evaluatorId: managerId || '',
+            assignedBy: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim(),
             assignedDate: new Date().toISOString(),
-            dueDate: new Date(dueDate).toISOString(),
+            dueDate: new Date(dueDate || Date.now()).toISOString(),
             instructions: instructions || '',
+
+            // Status
             status: 'pending',
+            active: true,
+
+            // Workflow
             workflow: {
               step: 'self_assessment',
               status: 'pending',
-              dueDate: new Date(dueDate).toISOString()
+              dueDate: new Date(dueDate || Date.now()).toISOString()
             },
+
+            // Responses
             selfAssessment: {
               responses: {},
               completed: false,
@@ -206,19 +252,23 @@ const AssignEvaluationsPage = () => {
               completed: false,
               completedAt: null
             },
+
+            // Scores
             scores: {
               selfScore: null,
               managerScore: null,
               finalScore: null
             },
+
+            // Metadata
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
 
           console.log(`📋 Evaluation object:`, evaluation);
 
-          // Add evaluation to Firestore
-          const docRef = await addDoc(collection(db, 'evaluations'), evaluation);
+          // 🚀 NEW: Add evaluation to subcollection!
+          const docRef = await addDoc(collection(db, 'businesses', user.businessId, 'evaluations'), evaluation);
           console.log(`✅ Created evaluation ${docRef.id} for user ${userId}`);
           
           return { id: docRef.id, ...evaluation };
@@ -229,10 +279,20 @@ const AssignEvaluationsPage = () => {
         }
       });
 
-      await Promise.all(evaluationPromises);
+      // Wait for all evaluations to be created and capture results
+      const results = await Promise.all(evaluationPromises);
       
-      console.log(`🎉 Successfully created ${selectedUsers.length} evaluations`);
-      alert(`Successfully assigned evaluations to ${selectedUsers.length} team members!`);
+      console.log('Evaluation creation results:', results);
+      
+      // Check if all evaluations were created successfully
+      const allSuccessful = results.every(result => result && result.id);
+      
+      if (allSuccessful) {
+        console.log(`🎉 Successfully created ${selectedUsers.length} evaluations`);
+        alert(`Successfully assigned evaluations to ${selectedUsers.length} team members!`);
+      } else {
+        throw new Error('Some evaluations failed to create');
+      }
       
       setShowAssignModal(false);
       setSelectedTemplate(null);
@@ -242,7 +302,19 @@ const AssignEvaluationsPage = () => {
       
     } catch (error) {
       console.error('❌ Error assigning evaluations:', error);
-      alert('Failed to assign evaluations. Please try again.');
+      
+      // Get detailed error message
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Failed to assign evaluations';
+      
+      console.error('Detailed error:', {
+        error,
+        message: errorMessage,
+        stack: error.stack
+      });
+      
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

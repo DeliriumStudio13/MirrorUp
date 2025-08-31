@@ -48,9 +48,8 @@ exports.createBusinessAndAdmin = (0, https_1.onCall)({ cors: true }, async (requ
             updatedAt: firestore_1.FieldValue.serverTimestamp()
         };
         await config_1.db.collection('businesses').doc(businessId).set(businessDoc);
-        // Create admin user document
+        // 🚀 NEW: Create admin user document in subcollection (no businessId - implicit in path)
         const userDoc = {
-            businessId,
             profile: {
                 firstName: adminData.firstName,
                 lastName: adminData.lastName,
@@ -80,7 +79,12 @@ exports.createBusinessAndAdmin = (0, https_1.onCall)({ cors: true }, async (requ
             createdAt: firestore_1.FieldValue.serverTimestamp(),
             updatedAt: firestore_1.FieldValue.serverTimestamp()
         };
-        await config_1.db.collection('users').doc(firebaseUser.uid).set(userDoc);
+        await config_1.db.collection('businesses').doc(businessId).collection('users').doc(firebaseUser.uid).set(userDoc);
+        // 🚀 NEW: Create user-business mapping for authentication lookups
+        await config_1.db.collection('userBusinessMap').doc(firebaseUser.uid).set({
+            businessId,
+            createdAt: firestore_1.FieldValue.serverTimestamp()
+        });
         firebase_functions_1.logger.info('Successfully created business and admin user', {
             businessId,
             userId: firebaseUser.uid

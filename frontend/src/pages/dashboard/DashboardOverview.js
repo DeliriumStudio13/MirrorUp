@@ -61,7 +61,8 @@ const DashboardOverview = () => {
     }
     
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      // 🚀 NEW: Use subcollection path
+      const userDoc = await getDoc(doc(db, 'businesses', user.businessId, 'users', userId));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const displayName = `${userData.profile?.firstName || userData.firstName || ''} ${userData.profile?.lastName || userData.lastName || ''}`.trim() || userData.email || 'Unknown';
@@ -87,7 +88,8 @@ const DashboardOverview = () => {
     }
     
     try {
-      const templateDoc = await getDoc(doc(db, 'evaluationTemplates', templateId));
+      // 🚀 NEW: Use subcollection path
+      const templateDoc = await getDoc(doc(db, 'businesses', user.businessId, 'evaluationTemplates', templateId));
       if (templateDoc.exists()) {
         const templateData = templateDoc.data();
         const scoringSystem = templateData.scoringSystem || '1-5';

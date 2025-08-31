@@ -85,8 +85,9 @@ const MyTeamPage = () => {
     
     try {
       const currentYear = new Date().getFullYear();
+      // 🚀 NEW: Use subcollection path (assuming bonusAllocations maps to bonusCalculations)
       const allocationDoc = await getDoc(
-        doc(db, 'bonusAllocations', `${user.employeeInfo.department}_${currentYear}`)
+        doc(db, 'businesses', user.businessId, 'bonusCalculations', `${user.employeeInfo.department}_${currentYear}`)
       );
       
       if (allocationDoc.exists()) {

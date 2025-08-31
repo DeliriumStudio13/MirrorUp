@@ -52,11 +52,18 @@ const MyEvaluationsPage = () => {
 
   useEffect(() => {
     const loadMyEvaluations = async () => {
-      const userId = user?.uid || user?.id;
+      const userId = user?.id;
       if (!userId || !user?.businessId) {
         console.log('❌ Missing user data:', { userId, businessId: user?.businessId });
         return;
       }
+      
+      console.log('👤 Loading evaluations for user:', {
+        userId,
+        businessId: user.businessId,
+        role: user.role,
+        name: `${user.profile?.firstName} ${user.profile?.lastName}`
+      });
       
       console.log('📋 Loading evaluations for user:', userId);
       setLoading(true);

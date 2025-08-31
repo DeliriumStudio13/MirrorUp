@@ -24,7 +24,8 @@ import {
   selectEvaluationAssignments,
   selectBonusAssignments,
   selectAssignmentsLoading,
-  selectAssignmentsError
+  selectAssignmentsError,
+  clearError
 } from '../../store/slices/assignmentSlice';
 
 import {
@@ -63,6 +64,7 @@ const AssignmentManagementPage = () => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [localError, setLocalError] = useState(null);
 
   // Form state for creating/editing assignments
   const [assignmentForm, setAssignmentForm] = useState({
@@ -123,9 +125,84 @@ const AssignmentManagementPage = () => {
     return dept?.name || 'No Department';
   };
 
+  // Check if user is in evaluator's department hierarchy
+  const isInDepartmentHierarchy = (evaluatorId, evaluateeId) => {
+    const evaluator = users.find(u => u.id === evaluatorId);
+    const evaluatee = users.find(u => u.id === evaluateeId);
+
+    if (!evaluator || !evaluatee) return false;
+
+    // HR and admin can evaluate anyone
+    if (['admin', 'hr'].includes(evaluator.role)) return true;
+
+    // Get evaluator's department and its children
+    const evaluatorDept = departments.find(d => d.id === evaluator.employeeInfo?.department);
+    if (!evaluatorDept) return false;
+
+    const evaluateeDept = departments.find(d => d.id === evaluatee.employeeInfo?.department);
+    if (!evaluateeDept) return false;
+
+    // Check if evaluatee's department is the same or a child of evaluator's department
+    const isChild = (parentId, childId) => {
+      if (parentId === childId) return true;
+      const child = departments.find(d => d.id === childId);
+      if (!child || !child.parentDepartment) return false;
+      return isChild(parentId, child.parentDepartment);
+    };
+
+    return isChild(evaluatorDept.id, evaluateeDept.id);
+  };
+
+  // Validate assignment
+  const validateAssignment = () => {
+    const evaluatorId = activeTab === 'evaluation' ? assignmentForm.evaluatorId : assignmentForm.allocatorId;
+    const evaluateeId = activeTab === 'evaluation' ? assignmentForm.evaluateeId : assignmentForm.recipientId;
+
+    // Check if users exist
+    const evaluator = users.find(u => u.id === evaluatorId);
+    const evaluatee = users.find(u => u.id === evaluateeId);
+    if (!evaluator || !evaluatee) {
+      throw new Error('Invalid users selected');
+    }
+
+    // Check for self-evaluation
+    if (evaluatorId === evaluateeId) {
+      throw new Error('Users cannot evaluate/allocate to themselves');
+    }
+
+    // Check role permissions
+    if (activeTab === 'evaluation') {
+      if (!['admin', 'hr', 'head-manager', 'manager', 'supervisor'].includes(evaluator.role)) {
+        throw new Error('Selected evaluator does not have permission to evaluate');
+      }
+    } else {
+      if (!['admin', 'hr'].includes(evaluator.role)) {
+        throw new Error('Only HR and admin can allocate bonus');
+      }
+    }
+
+    // Check department hierarchy for evaluations
+    if (activeTab === 'evaluation' && !isInDepartmentHierarchy(evaluatorId, evaluateeId)) {
+      throw new Error('Evaluator can only evaluate users in their department hierarchy');
+    }
+
+    // Check budget limit for bonus assignments
+    if (activeTab === 'bonus' && assignmentForm.budgetLimit) {
+      const limit = parseFloat(assignmentForm.budgetLimit);
+      if (isNaN(limit) || limit <= 0) {
+        throw new Error('Budget limit must be a positive number');
+      }
+    }
+
+    return true;
+  };
+
   // Handle form submission
   const handleCreateAssignment = async () => {
     try {
+      // Validate assignment
+      validateAssignment();
+
       const assignmentData = {
         businessId: user.businessId,
         assignedBy: user.uid || user.id,
@@ -143,13 +220,69 @@ const AssignmentManagementPage = () => {
       resetForm();
     } catch (error) {
       console.error('Error creating assignment:', error);
+      // Show error to user
+      dispatch(clearError());
+      setLocalError(error.message);
     }
+  };
+
+  // Validate bulk assignments
+  const validateBulkAssignments = () => {
+    if (!selectedEvaluator || bulkAssignments.length === 0) {
+      throw new Error('Please select an evaluator and at least one evaluatee');
+    }
+
+    const evaluator = users.find(u => u.id === selectedEvaluator);
+    if (!evaluator) {
+      throw new Error('Invalid evaluator selected');
+    }
+
+    // Check evaluator permissions
+    if (!['admin', 'hr', 'head-manager', 'manager', 'supervisor'].includes(evaluator.role)) {
+      throw new Error('Selected evaluator does not have permission to evaluate');
+    }
+
+    // Check each evaluatee
+    for (const evaluateeId of bulkAssignments) {
+      const evaluatee = users.find(u => u.id === evaluateeId);
+      if (!evaluatee) {
+        throw new Error(`Invalid evaluatee selected: ${evaluateeId}`);
+      }
+
+      // Check for self-evaluation
+      if (evaluator.id === evaluatee.id) {
+        throw new Error('Users cannot evaluate themselves');
+      }
+
+      // Check if evaluator has permission
+      if (!['admin', 'hr'].includes(evaluator.role)) {
+        // Check if there's an active assignment for this evaluator-evaluatee pair
+        const hasAssignment = evaluationAssignments.some(
+          assignment => 
+            assignment.evaluatorId === evaluator.id && 
+            assignment.evaluateeId === evaluatee.id &&
+            assignment.active
+        );
+
+        if (!hasAssignment) {
+          throw new Error(`${evaluator.profile.firstName} does not have permission to evaluate ${evaluatee.profile.firstName}`);
+        }
+      }
+
+      // Check department hierarchy
+      if (!isInDepartmentHierarchy(evaluator.id, evaluatee.id)) {
+        throw new Error(`${evaluator.profile.firstName} can only evaluate users in their department hierarchy`);
+      }
+    }
+
+    return true;
   };
 
   // Handle bulk assignment creation
   const handleBulkCreate = async () => {
     try {
-      if (!selectedEvaluator || bulkAssignments.length === 0) return;
+      // Validate assignments
+      validateBulkAssignments();
 
       const assignments = bulkAssignments.map(evaluateeId => ({
         evaluatorId: selectedEvaluator,
@@ -168,6 +301,9 @@ const AssignmentManagementPage = () => {
       resetBulkForm();
     } catch (error) {
       console.error('Error creating bulk assignments:', error);
+      // Show error to user
+      dispatch(clearError());
+      setLocalError(error.message);
     }
   };
 
@@ -179,11 +315,13 @@ const AssignmentManagementPage = () => {
 
       if (activeTab === 'evaluation') {
         await dispatch(updateEvaluationAssignment({
+          businessId: user.businessId,
           assignmentId: editingAssignment.id,
           updates
         })).unwrap();
       } else {
         await dispatch(updateBonusAssignment({
+          businessId: user.businessId,
           assignmentId: editingAssignment.id,
           updates
         })).unwrap();
@@ -200,9 +338,15 @@ const AssignmentManagementPage = () => {
   const handleDeleteAssignment = async (assignmentId) => {
     try {
       if (activeTab === 'evaluation') {
-        await dispatch(deleteEvaluationAssignment(assignmentId)).unwrap();
+        await dispatch(deleteEvaluationAssignment({
+          businessId: user.businessId,
+          assignmentId: assignmentId
+        })).unwrap();
       } else {
-        await dispatch(deleteBonusAssignment(assignmentId)).unwrap();
+        await dispatch(deleteBonusAssignment({
+          businessId: user.businessId,
+          assignmentId: assignmentId
+        })).unwrap();
       }
       setDeleteConfirm(null);
     } catch (error) {
@@ -231,14 +375,58 @@ const AssignmentManagementPage = () => {
     setSelectedDepartment('');
   };
 
-  // Filter users for evaluator/allocator selection (managers and above)
+  // Filter users for evaluator/allocator selection
   const getEvaluatorOptions = () => {
-    return users.filter(u => ['admin', 'hr', 'head-manager', 'manager', 'supervisor'].includes(u.role));
+    if (activeTab === 'evaluation') {
+      // For evaluations: get users who have evaluation assignments
+      return users.filter(u => {
+        // Check if user has any evaluation assignments
+        const hasAssignments = evaluationAssignments.some(
+          assignment => assignment.evaluatorId === u.id && assignment.active
+        );
+        return hasAssignments || ['admin', 'hr'].includes(u.role);
+      });
+    } else {
+      // For bonus: only HR and admin can allocate bonus
+      return users.filter(u => ['admin', 'hr'].includes(u.role));
+    }
   };
 
   // Filter users for evaluatee/recipient selection
   const getEvaluateeOptions = () => {
-    return users.filter(u => u.role !== 'admin'); // Everyone except system admins can be evaluated
+    const currentUser = users.find(u => u.id === (activeTab === 'evaluation' ? 
+      assignmentForm.evaluatorId : assignmentForm.allocatorId));
+
+    if (!currentUser) return [];
+
+    return users.filter(u => {
+      // Basic role check - no admins can be evaluated/receive bonus
+      if (u.role === 'admin') return false;
+
+      // Prevent self-evaluation/bonus
+      if (u.id === currentUser.id) return false;
+
+      if (activeTab === 'evaluation') {
+        // For evaluations: check if there's an assignment
+        if (['admin', 'hr'].includes(currentUser.role)) {
+          // Admin and HR can evaluate anyone except admins
+          return true;
+        }
+
+        // Check if there's an active assignment for this evaluator-evaluatee pair
+        const hasAssignment = evaluationAssignments.some(
+          assignment => 
+            assignment.evaluatorId === currentUser.id && 
+            assignment.evaluateeId === u.id &&
+            assignment.active
+        );
+
+        return hasAssignment;
+      } else {
+        // For bonus: HR and admin can allocate to anyone except admins
+        return ['admin', 'hr'].includes(currentUser.role);
+      }
+    });
   };
 
   // Filter users for bulk assignment based on department
@@ -327,9 +515,9 @@ const AssignmentManagementPage = () => {
         </div>
 
         {/* Error Display */}
-        {error && (
+        {(error || localError) && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-600">{localError || error}</p>
           </div>
         )}
 

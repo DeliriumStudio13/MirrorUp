@@ -40,7 +40,10 @@ const MyEvaluationResultsPage = () => {
         console.log('📝 Loading evaluation results...');
         
         // Load the evaluation
-        const evalResult = await dispatch(fetchEvaluation(evaluationId));
+        const evalResult = await dispatch(fetchEvaluation({
+          businessId: user.businessId,
+          evaluationId: evaluationId
+        }));
         console.log('📊 Evaluation result:', evalResult);
         
         if (evalResult.payload) {
@@ -51,7 +54,10 @@ const MyEvaluationResultsPage = () => {
           // Load the template
           if (evalData.templateId) {
             console.log('📑 Loading template:', evalData.templateId);
-            const templateResult = await dispatch(fetchEvaluationTemplate(evalData.templateId));
+            const templateResult = await dispatch(fetchEvaluationTemplate({
+              businessId: user.businessId,
+              templateId: evalData.templateId
+            }));
             
             if (templateResult.payload) {
               setTemplate(templateResult.payload);

@@ -13,19 +13,22 @@ import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
+// Import development configuration
+import devConfig from '../config/dev.config.js';
+
 // Environment detection
 const isDevelopment = process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Firebase configuration for MirrorUp project
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyD8ACB8656g7lSdMA5h4nU9bj37hRaMjGQ",
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "mirrorup-e71a0.firebaseapp.com",
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "mirrorup-e71a0",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "mirrorup-e71a0.firebasestorage.app",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "852717548637",
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:852717548637:web:bf2e1aaa2a0615ebbc89b4",
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-GE20LY3H3H"
+const firebaseConfig = isDevelopment ? devConfig.firebase : {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Validate required config
@@ -50,6 +53,7 @@ try {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+// Initialize Functions with region and custom domain
 export const functions = getFunctions(app, 'us-central1');
 
 // Initialize Analytics (only in production and if supported)
@@ -71,7 +75,7 @@ export { analytics };
 
 // Development-only: Firebase Emulator Connection
 // Note: Remove this section when deploying to production
-if (isDevelopment && process.env.REACT_APP_USE_EMULATORS === 'true') {
+if (isDevelopment && devConfig.useEmulators) {
   console.log('🔧 Connecting to Firebase Emulators...');
   
   try {

@@ -47,7 +47,10 @@ const EvaluationCompletePage = () => {
         console.log('📋 Loading evaluation:', evaluationId);
         
         // Load the evaluation
-        const evalResult = await dispatch(fetchEvaluation(evaluationId));
+        const evalResult = await dispatch(fetchEvaluation({
+          businessId: user.businessId,
+          evaluationId: evaluationId
+        }));
         
         if (evalResult.payload) {
           const evalData = evalResult.payload;
@@ -57,7 +60,10 @@ const EvaluationCompletePage = () => {
           // Load the template
           if (evalData.templateId) {
             console.log('📑 Loading template:', evalData.templateId);
-            const templateResult = await dispatch(fetchEvaluationTemplate(evalData.templateId));
+            const templateResult = await dispatch(fetchEvaluationTemplate({
+              businessId: user.businessId,
+              templateId: evalData.templateId
+            }));
             
             if (templateResult.payload) {
               setTemplate(templateResult.payload);
@@ -174,6 +180,7 @@ const EvaluationCompletePage = () => {
       });
 
       const result = await dispatch(submitEvaluation({
+        businessId: user.businessId,
         evaluationId,
         responses: {
           selfAssessment: {
@@ -212,6 +219,7 @@ const EvaluationCompletePage = () => {
     
     try {
       const result = await dispatch(saveEvaluationProgress({
+        businessId: user.businessId,
         evaluationId,
         responses: {
           freeTextQuestions: responses.freeTextQuestions,

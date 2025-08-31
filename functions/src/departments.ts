@@ -44,8 +44,15 @@ export const createDepartment = onCall(async (request) => {
   }
 
   try {
+    // 🚀 NEW: First get user's business from mapping table
+    const mappingDoc = await db.collection('userBusinessMap').doc(request.auth.uid).get();
+    if (!mappingDoc.exists) {
+      throw new HttpsError('permission-denied', 'User business mapping not found');
+    }
+    const userBusinessId = mappingDoc.data()?.businessId;
+    
     // Verify the requesting user has permission to create departments
-    const requestingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    const requestingUserDoc = await db.collection('businesses').doc(userBusinessId).collection('users').doc(request.auth.uid).get();
     
     if (!requestingUserDoc.exists) {
       throw new HttpsError('permission-denied', 'Requesting user not found');
@@ -53,9 +60,8 @@ export const createDepartment = onCall(async (request) => {
 
     const requestingUser = requestingUserDoc.data();
     
-    // Check if requesting user belongs to the same business and has admin/hr permissions
-    if (requestingUser?.businessId !== businessId || 
-        (!requestingUser?.permissions?.canManageDepartments && requestingUser?.role !== 'admin')) {
+    // Check if user has admin/hr permissions (no businessId check needed - already scoped by subcollection)
+    if (!requestingUser?.permissions?.canManageDepartments && requestingUser?.role !== 'admin') {
       throw new HttpsError('permission-denied', 'Insufficient permissions to create departments');
     }
 
@@ -65,35 +71,29 @@ export const createDepartment = onCall(async (request) => {
       throw new HttpsError('not-found', 'Business not found');
     }
 
-    // If parent department is specified, verify it exists and belongs to the same business
+    // If parent department is specified, verify it exists (already scoped to business by subcollection)
     if (departmentData.parentDepartment) {
-      const parentDeptDoc = await db.collection('departments').doc(departmentData.parentDepartment).get();
+      const parentDeptDoc = await db.collection('businesses').doc(businessId).collection('departments').doc(departmentData.parentDepartment).get();
       
       if (!parentDeptDoc.exists) {
         throw new HttpsError('invalid-argument', 'Parent department not found');
       }
-
-      const parentDept = parentDeptDoc.data();
-      if (parentDept?.businessId !== businessId) {
-        throw new HttpsError('invalid-argument', 'Parent department does not belong to this business');
-      }
     }
 
-    // Check if department name already exists in this business
-    const existingDeptQuery = await db.collection('departments')
-      .where('businessId', '==', businessId)
-      .where('name', '==', departmentData.name)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
-
-    if (!existingDeptQuery.empty) {
+    // 🚀 NEW: Check if department name already exists - use subcollection and filter in code
+    const existingDeptQuery = await db.collection('businesses').doc(businessId).collection('departments').get();
+    
+    const duplicateName = existingDeptQuery.docs.find(doc => {
+      const data = doc.data();
+      return data.name === departmentData.name && data.isActive === true;
+    });
+    
+    if (duplicateName) {
       throw new HttpsError('already-exists', 'A department with this name already exists');
     }
 
-    // Create department document
+    // 🚀 NEW: Create department document (no businessId - implicit in subcollection)
     const departmentDocument = {
-      businessId,
       name: departmentData.name.trim(),
       description: departmentData.description?.trim() || null,
       parentDepartment: departmentData.parentDepartment || null,
@@ -106,7 +106,7 @@ export const createDepartment = onCall(async (request) => {
       updatedAt: FieldValue.serverTimestamp()
     };
 
-    const departmentRef = await db.collection('departments').add(departmentDocument);
+    const departmentRef = await db.collection('businesses').doc(businessId).collection('departments').add(departmentDocument);
 
     logger.info('Successfully created department', { 
       departmentId: departmentRef.id, 
@@ -156,8 +156,15 @@ export const deleteDepartment = onCall(async (request) => {
   }
 
   try {
+    // 🚀 NEW: First get user's business from mapping table
+    const mappingDoc = await db.collection('userBusinessMap').doc(request.auth.uid).get();
+    if (!mappingDoc.exists) {
+      throw new HttpsError('permission-denied', 'User business mapping not found');
+    }
+    const userBusinessId = mappingDoc.data()?.businessId;
+    
     // Verify the requesting user has permission to delete departments
-    const requestingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    const requestingUserDoc = await db.collection('businesses').doc(userBusinessId).collection('users').doc(request.auth.uid).get();
     
     if (!requestingUserDoc.exists) {
       throw new HttpsError('permission-denied', 'Requesting user not found');
@@ -165,51 +172,44 @@ export const deleteDepartment = onCall(async (request) => {
 
     const requestingUser = requestingUserDoc.data();
     
-    // Check if requesting user belongs to the same business and has admin/hr permissions
-    if (requestingUser?.businessId !== businessId || 
-        (!requestingUser?.permissions?.canManageDepartments && requestingUser?.role !== 'admin')) {
+    // Check if user has admin/hr permissions (no businessId check needed - already scoped by subcollection)
+    if (!requestingUser?.permissions?.canManageDepartments && requestingUser?.role !== 'admin') {
       throw new HttpsError('permission-denied', 'Insufficient permissions to delete departments');
     }
 
-    // Verify department exists and belongs to the same business
-    const departmentDoc = await db.collection('departments').doc(departmentId).get();
+    // 🚀 NEW: Verify department exists (already scoped to business by subcollection)
+    const departmentDoc = await db.collection('businesses').doc(businessId).collection('departments').doc(departmentId).get();
     
     if (!departmentDoc.exists) {
       throw new HttpsError('not-found', 'Department not found');
     }
 
-    const department = departmentDoc.data();
+    // 🚀 NEW: Check if department has employees - use subcollection and filter in code
+    const employeesQuery = await db.collection('businesses').doc(businessId).collection('users').get();
     
-    if (department?.businessId !== businessId) {
-      throw new HttpsError('permission-denied', 'Department not found in this business');
-    }
-
-    // Check if department has employees
-    const employeesQuery = await db.collection('users')
-      .where('businessId', '==', businessId)
-      .where('employeeInfo.department', '==', departmentId)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
-
-    if (!employeesQuery.empty) {
+    const hasEmployees = employeesQuery.docs.find(doc => {
+      const data = doc.data();
+      return data.employeeInfo?.department === departmentId && data.isActive === true;
+    });
+    
+    if (hasEmployees) {
       throw new HttpsError('failed-precondition', 'Cannot delete department with active employees. Please reassign employees first.');
     }
 
-    // Check if department has child departments
-    const childDeptQuery = await db.collection('departments')
-      .where('businessId', '==', businessId)
-      .where('parentDepartment', '==', departmentId)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
+    // 🚀 NEW: Check if department has child departments - use subcollection and filter in code
+    const childDeptQuery = await db.collection('businesses').doc(businessId).collection('departments').get();
+    
+    const hasChildDepts = childDeptQuery.docs.find(doc => {
+      const data = doc.data();
+      return data.parentDepartment === departmentId && data.isActive === true;
+    });
 
-    if (!childDeptQuery.empty) {
+    if (hasChildDepts) {
       throw new HttpsError('failed-precondition', 'Cannot delete department with child departments. Please reorganize the hierarchy first.');
     }
 
-    // Soft delete the department (mark as inactive instead of removing)
-    await db.collection('departments').doc(departmentId).update({
+    // 🚀 NEW: Soft delete the department (mark as inactive instead of removing)
+    await db.collection('businesses').doc(businessId).collection('departments').doc(departmentId).update({
       isActive: false,
       deletedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()

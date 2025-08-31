@@ -26,19 +26,52 @@ export const fetchDepartments = createAsyncThunk(
   'departments/fetchDepartments',
   async (businessId, { rejectWithValue }) => {
     try {
+      // 🚀 NEW: Use subcollection - no businessId filter needed!
       const departmentQuery = query(
-        collection(db, 'departments'),
-        where('businessId', '==', businessId)
+        collection(db, 'businesses', businessId, 'departments')
       );
 
-      const querySnapshot = await getDocs(departmentQuery);
-      const departments = [];
+      // Get all departments
+      const departmentSnapshot = await getDocs(departmentQuery);
+      const departments = departmentSnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      }));
 
-      querySnapshot.forEach((doc) => {
-        departments.push({ id: doc.id, ...doc.data() });
+      // Get all users to calculate employee counts
+      const usersQuery = query(collection(db, 'businesses', businessId, 'users'));
+      const usersSnapshot = await getDocs(usersQuery);
+
+      // Calculate employee counts
+      const departmentCounts = {};
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        if (userData.isActive && userData.employeeInfo?.department) {
+          departmentCounts[userData.employeeInfo.department] = (departmentCounts[userData.employeeInfo.department] || 0) + 1;
+        }
       });
 
-      return departments;
+      // Update department counts
+      const updatedDepartments = departments.map(dept => ({
+        ...dept,
+        employeeCount: departmentCounts[dept.id] || dept.employeeCount || 0
+      }));
+
+      // Update counts in Firestore
+      const updatePromises = updatedDepartments.map(dept => {
+        if (dept.employeeCount !== (departmentCounts[dept.id] || 0)) {
+          const deptRef = doc(db, 'businesses', businessId, 'departments', dept.id);
+          return updateDoc(deptRef, {
+            employeeCount: departmentCounts[dept.id] || 0,
+            updatedAt: serverTimestamp()
+          });
+        }
+        return Promise.resolve();
+      });
+
+      await Promise.all(updatePromises);
+
+      return updatedDepartments;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -47,9 +80,10 @@ export const fetchDepartments = createAsyncThunk(
 
 export const fetchDepartment = createAsyncThunk(
   'departments/fetchDepartment',
-  async (departmentId, { rejectWithValue }) => {
+  async ({ businessId, departmentId }, { rejectWithValue }) => {
     try {
-      const departmentDoc = await getDoc(doc(db, 'departments', departmentId));
+      // Use correct subcollection path
+      const departmentDoc = await getDoc(doc(db, 'businesses', businessId, 'departments', departmentId));
       
       if (!departmentDoc.exists()) {
         throw new Error('Department not found');
@@ -67,26 +101,29 @@ export const createDepartment = createAsyncThunk(
   async ({ departmentData, businessId }, { rejectWithValue }) => {
     try {
       // Check if department with same name already exists
+      // Simple query without compound filters
       const existingQuery = query(
-        collection(db, 'departments'),
-        where('businessId', '==', businessId),
-        where('name', '==', departmentData.name),
-        where('isActive', '==', true)
+        collection(db, 'businesses', businessId, 'departments')
       );
       
       const existingDepts = await getDocs(existingQuery);
-      if (!existingDepts.empty) {
+      const departmentExists = existingDepts.docs.some(doc => {
+        const data = doc.data();
+        return data.name === departmentData.name && data.isActive === true;
+      });
+      
+      if (departmentExists) {
         throw new Error('A department with this name already exists');
       }
 
-      const docRef = await addDoc(collection(db, 'departments'), {
+      // 🚀 NEW: Use subcollection - businessId not stored in document
+      const docRef = await addDoc(collection(db, 'businesses', businessId, 'departments'), {
         name: departmentData.name,
         description: departmentData.description || null,
         parentDepartment: departmentData.parentDepartment || null,
         manager: departmentData.manager || null,
         budget: departmentData.budget ? parseFloat(departmentData.budget) : null,
         location: departmentData.location || null,
-        businessId,
         isActive: true,
         employeeCount: 0,
         createdAt: serverTimestamp(),
@@ -118,7 +155,8 @@ export const updateDepartment = createAsyncThunk(
   'departments/updateDepartment',
   async ({ departmentId, departmentData, businessId }, { rejectWithValue }) => {
     try {
-      const departmentRef = doc(db, 'departments', departmentId);
+      // 🚀 NEW: Use subcollection path
+      const departmentRef = doc(db, 'businesses', businessId, 'departments', departmentId);
       
       const updateData = {
         name: departmentData.name,
@@ -133,12 +171,16 @@ export const updateDepartment = createAsyncThunk(
 
       await updateDoc(departmentRef, updateData);
 
+      // Get current department data to preserve employee count
+      const currentDept = await getDoc(departmentRef);
+      const currentData = currentDept.exists() ? currentDept.data() : {};
+
       // Return updated department data
       return { 
         id: departmentId, 
         ...updateData,
         businessId,
-        employeeCount: 0, // Keep existing employee count
+        employeeCount: currentData.employeeCount || 0, // Preserve existing employee count
         updatedAt: new Date()
       };
     } catch (error) {
@@ -149,9 +191,10 @@ export const updateDepartment = createAsyncThunk(
 
 export const deleteDepartment = createAsyncThunk(
   'departments/deleteDepartment',
-  async (departmentId, { rejectWithValue }) => {
+  async ({ departmentId, businessId }, { rejectWithValue }) => {
     try {
-      const departmentRef = doc(db, 'departments', departmentId);
+      // 🚀 NEW: Use subcollection path
+      const departmentRef = doc(db, 'businesses', businessId, 'departments', departmentId);
       
       // Soft delete - mark as inactive
       await updateDoc(departmentRef, {
@@ -170,12 +213,9 @@ export const fetchDepartmentHierarchy = createAsyncThunk(
   'departments/fetchDepartmentHierarchy',
   async (businessId, { rejectWithValue }) => {
     try {
-      // Get all active departments for the business
+      // Get all departments for the business without filters
       const departmentQuery = query(
-        collection(db, 'departments'),
-        where('businessId', '==', businessId),
-        where('isActive', '==', true),
-        orderBy('name')
+        collection(db, 'businesses', businessId, 'departments')
       );
 
       const querySnapshot = await getDocs(departmentQuery);
@@ -184,6 +224,9 @@ export const fetchDepartmentHierarchy = createAsyncThunk(
       querySnapshot.forEach((doc) => {
         departments.push({ id: doc.id, ...doc.data() });
       });
+
+      // Sort departments by name in JavaScript (since we removed orderBy)
+      departments.sort((a, b) => a.name.localeCompare(b.name));
 
       // Build hierarchy tree
       const departmentMap = new Map();
@@ -220,20 +263,32 @@ export const fetchDepartmentHierarchy = createAsyncThunk(
 
 export const fetchDepartmentEmployees = createAsyncThunk(
   'departments/fetchDepartmentEmployees',
-  async (departmentId, { rejectWithValue }) => {
+  async ({ businessId, departmentId }, { rejectWithValue }) => {
     try {
+      // Simple query without filters
       const employeesQuery = query(
-        collection(db, 'users'),
-        where('employeeInfo.department', '==', departmentId),
-        where('isActive', '==', true),
-        orderBy('profile.firstName')
+        collection(db, 'businesses', businessId, 'users')
       );
 
       const querySnapshot = await getDocs(employeesQuery);
-      const employees = [];
+      let employees = [];
 
+      // Client-side filtering and sorting
       querySnapshot.forEach((doc) => {
-        employees.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        if (
+          data.employeeInfo?.department === departmentId && 
+          data.isActive === true
+        ) {
+          employees.push({ id: doc.id, ...data });
+        }
+      });
+
+      // Client-side sorting by first name
+      employees.sort((a, b) => {
+        const aName = a.profile?.firstName || '';
+        const bName = b.profile?.firstName || '';
+        return aName.localeCompare(bName);
       });
 
       return { departmentId, employees };

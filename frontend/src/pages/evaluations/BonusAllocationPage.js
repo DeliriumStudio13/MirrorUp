@@ -99,12 +99,9 @@ const BonusAllocationPage = () => {
           console.error('❌ Error fetching evaluations via Redux:', evalError);
           
           try {
-            // Direct Firebase query to bypass Redux indexing issues
-            const evaluationsRef = collection(db, 'evaluations');
-            const evaluationsQuery = query(
-              evaluationsRef, 
-              where('businessId', '==', user?.businessId)
-            );
+            // 🚀 NEW: Direct subcollection query - no businessId filter needed!
+            const evaluationsRef = collection(db, 'businesses', user?.businessId, 'evaluations');
+            const evaluationsQuery = query(evaluationsRef);
             const querySnapshot = await getDocs(evaluationsQuery);
             
             const directEvaluations = querySnapshot.docs.map(doc => ({
@@ -315,10 +312,48 @@ const BonusAllocationPage = () => {
     setBudgetExceeded(totalAllocation > budget);
   }, [teamMembers, bonusAllocations, totalBudget]);
 
+  // Validate allocations against assignments
+  const validateAllocations = async () => {
+    // Get all bonus assignments for validation
+    const assignmentsRef = collection(db, 'businesses', user.businessId, 'bonusAssignments');
+    const assignmentsQuery = query(
+      assignmentsRef,
+      where('allocatorId', '==', user.id),
+      where('active', '==', true)
+    );
+
+    const assignmentsSnapshot = await getDocs(assignmentsQuery);
+    const validAssignments = new Map(
+      assignmentsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return [data.recipientId, data];
+      })
+    );
+
+    // Check each allocation
+    for (const [userId, allocation] of Object.entries(bonusAllocations)) {
+      const assignment = validAssignments.get(userId);
+      if (!assignment) {
+        throw new Error(`No valid bonus assignment found for user ${userId}`);
+      }
+
+      // Check budget limit if set
+      if (assignment.budgetLimit) {
+        const bonusAmount = (parseFloat(allocation.monthlySalary) * parseFloat(allocation.bonusPercentage)) / 100;
+        if (bonusAmount > parseFloat(assignment.budgetLimit)) {
+          throw new Error(`Bonus amount for ${userId} exceeds the assigned budget limit`);
+        }
+      }
+    }
+  };
+
   // Save progress
   const handleSaveProgress = async () => {
     setSaving(true);
     try {
+      // Validate allocations against assignments first
+      await validateAllocations();
+
       const allocationData = {
         departmentId: user?.employeeInfo?.department,
         year: new Date().getFullYear(),

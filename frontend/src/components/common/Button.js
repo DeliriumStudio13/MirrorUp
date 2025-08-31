@@ -14,6 +14,7 @@ const Button = ({
   icon: Icon = null,
   iconPosition = 'left',
   onClick = null,
+  as: Component = 'button',
   ...props
 }) => {
   const baseClasses = 'btn transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
@@ -94,15 +95,15 @@ const Button = ({
   };
 
   return (
-    <button
-      type={type}
+    <Component
+      type={Component === 'button' ? type : undefined}
       className={buttonClasses}
       disabled={disabled || loading}
       onClick={handleClick}
       {...props}
     >
       {renderContent()}
-    </button>
+    </Component>
   );
 };
 

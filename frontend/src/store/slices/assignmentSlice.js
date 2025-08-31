@@ -29,21 +29,37 @@ export const fetchEvaluationAssignments = createAsyncThunk(
   'assignments/fetchEvaluationAssignments',
   async (businessId, { rejectWithValue }) => {
     try {
+      // 🚀 NEW: Use subcollection - no queries needed at all!  
       const assignmentsQuery = query(
-        collection(db, 'evaluationAssignments'),
-        where('businessId', '==', businessId),
-        where('active', '==', true),
-        orderBy('assignedDate', 'desc')
+        collection(db, 'businesses', businessId, 'evaluationAssignments')
       );
 
       const querySnapshot = await getDocs(assignmentsQuery);
       const assignments = [];
 
       querySnapshot.forEach((doc) => {
-        assignments.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        const convertedData = {
+          id: doc.id,
+          ...data,
+          // Convert Firebase Timestamps to ISO strings for serialization
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          assignedDate: data.assignedDate?.toDate?.()?.toISOString() || new Date().toISOString(),
+          dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+          // Ensure required fields have default values
+          active: data.active ?? true,
+          assignmentType: data.assignmentType || 'permanent',
+          notes: data.notes || '',
+          expiresDate: data.expiresDate || null
+        };
+        assignments.push(convertedData);
       });
 
-      return assignments;
+      // Filter active assignments and sort by assignedDate in JavaScript
+      return assignments
+        .filter(assignment => assignment.active === true)
+        .sort((a, b) => new Date(b.assignedDate) - new Date(a.assignedDate));
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -52,17 +68,47 @@ export const fetchEvaluationAssignments = createAsyncThunk(
 
 export const createEvaluationAssignment = createAsyncThunk(
   'assignments/createEvaluationAssignment',
-  async (assignmentData, { rejectWithValue }) => {
+  async ({ businessId, ...assignmentData }, { rejectWithValue }) => {
     try {
-      const docRef = await addDoc(collection(db, 'evaluationAssignments'), {
+      // 🚀 NEW: Use subcollection - businessId not stored in document
+      // Check for existing assignment
+      const existingQuery = query(
+        collection(db, 'businesses', businessId, 'evaluationAssignments'),
+        where('evaluatorId', '==', assignmentData.evaluatorId),
+        where('evaluateeId', '==', assignmentData.evaluateeId),
+        where('active', '==', true)
+      );
+      const existingDocs = await getDocs(existingQuery);
+      
+      if (!existingDocs.empty) {
+        throw new Error('An active assignment already exists for this evaluator and evaluatee');
+      }
+
+      // Prepare assignment data with required fields
+      const assignmentDoc = {
         ...assignmentData,
         active: true,
+        assignedDate: serverTimestamp(),
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp(),
+        assignmentType: assignmentData.assignmentType || 'permanent',
+        notes: assignmentData.notes || '',
+        expiresDate: assignmentData.expiresDate || null
+      };
+
+      const docRef = await addDoc(collection(db, 'businesses', businessId, 'evaluationAssignments'), assignmentDoc);
 
       const createdDoc = await getDoc(docRef);
-      return { id: createdDoc.id, ...createdDoc.data() };
+      const data = createdDoc.data();
+      return { 
+        id: createdDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -71,9 +117,10 @@ export const createEvaluationAssignment = createAsyncThunk(
 
 export const updateEvaluationAssignment = createAsyncThunk(
   'assignments/updateEvaluationAssignment',
-  async ({ assignmentId, updates }, { rejectWithValue }) => {
+  async ({ businessId, assignmentId, updates }, { rejectWithValue }) => {
     try {
-      const assignmentRef = doc(db, 'evaluationAssignments', assignmentId);
+      // 🚀 NEW: Use subcollection path
+      const assignmentRef = doc(db, 'businesses', businessId, 'evaluationAssignments', assignmentId);
       
       await updateDoc(assignmentRef, {
         ...updates,
@@ -81,7 +128,16 @@ export const updateEvaluationAssignment = createAsyncThunk(
       });
 
       const updatedDoc = await getDoc(assignmentRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return { 
+        id: updatedDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -90,10 +146,11 @@ export const updateEvaluationAssignment = createAsyncThunk(
 
 export const deleteEvaluationAssignment = createAsyncThunk(
   'assignments/deleteEvaluationAssignment',
-  async (assignmentId, { rejectWithValue }) => {
+  async ({ businessId, assignmentId }, { rejectWithValue }) => {
     try {
       // Soft delete - mark as inactive
-      const assignmentRef = doc(db, 'evaluationAssignments', assignmentId);
+      // 🚀 NEW: Use subcollection path
+      const assignmentRef = doc(db, 'businesses', businessId, 'evaluationAssignments', assignmentId);
       await updateDoc(assignmentRef, {
         active: false,
         updatedAt: serverTimestamp()
@@ -114,21 +171,37 @@ export const fetchBonusAssignments = createAsyncThunk(
   'assignments/fetchBonusAssignments',
   async (businessId, { rejectWithValue }) => {
     try {
+      // 🚀 NEW: Use subcollection - no queries needed at all!
       const assignmentsQuery = query(
-        collection(db, 'bonusAssignments'),
-        where('businessId', '==', businessId),
-        where('active', '==', true),
-        orderBy('assignedDate', 'desc')
+        collection(db, 'businesses', businessId, 'bonusAssignments')
       );
 
       const querySnapshot = await getDocs(assignmentsQuery);
       const assignments = [];
 
       querySnapshot.forEach((doc) => {
-        assignments.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        const convertedData = {
+          id: doc.id,
+          ...data,
+          // Convert Firebase Timestamps to ISO strings for serialization
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          assignedDate: data.assignedDate?.toDate?.()?.toISOString() || new Date().toISOString(),
+          dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+          // Ensure required fields have default values
+          active: data.active ?? true,
+          assignmentType: data.assignmentType || 'permanent',
+          notes: data.notes || '',
+          expiresDate: data.expiresDate || null
+        };
+        assignments.push(convertedData);
       });
 
-      return assignments;
+      // Filter active assignments and sort by assignedDate in JavaScript
+      return assignments
+        .filter(assignment => assignment.active === true)
+        .sort((a, b) => new Date(b.assignedDate) - new Date(a.assignedDate));
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -137,17 +210,48 @@ export const fetchBonusAssignments = createAsyncThunk(
 
 export const createBonusAssignment = createAsyncThunk(
   'assignments/createBonusAssignment',
-  async (assignmentData, { rejectWithValue }) => {
+  async ({ businessId, ...assignmentData }, { rejectWithValue }) => {
     try {
-      const docRef = await addDoc(collection(db, 'bonusAssignments'), {
+      // 🚀 NEW: Use subcollection - businessId not stored in document
+      // Check for existing assignment
+      const existingQuery = query(
+        collection(db, 'businesses', businessId, 'bonusAssignments'),
+        where('allocatorId', '==', assignmentData.allocatorId),
+        where('recipientId', '==', assignmentData.recipientId),
+        where('active', '==', true)
+      );
+      const existingDocs = await getDocs(existingQuery);
+      
+      if (!existingDocs.empty) {
+        throw new Error('An active assignment already exists for this allocator and recipient');
+      }
+
+      // Prepare assignment data with required fields
+      const assignmentDoc = {
         ...assignmentData,
         active: true,
+        assignedDate: serverTimestamp(),
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp(),
+        assignmentType: assignmentData.assignmentType || 'permanent',
+        notes: assignmentData.notes || '',
+        budgetLimit: assignmentData.budgetLimit || null,
+        expiresDate: assignmentData.expiresDate || null
+      };
+
+      const docRef = await addDoc(collection(db, 'businesses', businessId, 'bonusAssignments'), assignmentDoc);
 
       const createdDoc = await getDoc(docRef);
-      return { id: createdDoc.id, ...createdDoc.data() };
+      const data = createdDoc.data();
+      return { 
+        id: createdDoc.id, 
+        ...data,
+        // Convert Firebase Timestamps to ISO strings for serialization
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -156,17 +260,27 @@ export const createBonusAssignment = createAsyncThunk(
 
 export const updateBonusAssignment = createAsyncThunk(
   'assignments/updateBonusAssignment',
-  async ({ assignmentId, updates }, { rejectWithValue }) => {
+  async ({ businessId, assignmentId, updates }, { rejectWithValue }) => {
     try {
-      const assignmentRef = doc(db, 'bonusAssignments', assignmentId);
+      // 🚀 NEW: Use subcollection path
+      const assignmentRef = doc(db, 'businesses', businessId, 'bonusAssignments', assignmentId);
       
       await updateDoc(assignmentRef, {
         ...updates,
         updatedAt: serverTimestamp()
       });
 
+      // Return updated assignment
       const updatedDoc = await getDoc(assignmentRef);
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const data = updatedDoc.data();
+      return {
+        id: updatedDoc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+        assignedDate: data.assignedDate?.toDate()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate()?.toISOString() || null
+      };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -175,10 +289,11 @@ export const updateBonusAssignment = createAsyncThunk(
 
 export const deleteBonusAssignment = createAsyncThunk(
   'assignments/deleteBonusAssignment',
-  async (assignmentId, { rejectWithValue }) => {
+  async ({ businessId, assignmentId }, { rejectWithValue }) => {
     try {
       // Soft delete - mark as inactive
-      const assignmentRef = doc(db, 'bonusAssignments', assignmentId);
+      // 🚀 NEW: Use subcollection path  
+      const assignmentRef = doc(db, 'businesses', businessId, 'bonusAssignments', assignmentId);
       await updateDoc(assignmentRef, {
         active: false,
         updatedAt: serverTimestamp()
@@ -201,13 +316,32 @@ export const bulkCreateEvaluationAssignments = createAsyncThunk(
     try {
       const createdAssignments = [];
       
-      for (const assignment of assignments) {
-        const docRef = await addDoc(collection(db, 'evaluationAssignments'), {
-          businessId,
+      // Check for existing assignments
+      const existingAssignments = await Promise.all(
+        assignments.map(assignment => 
+          getDocs(query(
+            collection(db, 'businesses', businessId, 'evaluationAssignments'),
+            where('evaluatorId', '==', assignment.evaluatorId),
+            where('evaluateeId', '==', assignment.evaluateeId),
+            where('active', '==', true)
+          ))
+        )
+      );
+
+      // Filter out assignments that already exist
+      const newAssignments = assignments.filter((_, index) => existingAssignments[index].empty);
+
+      if (newAssignments.length === 0) {
+        throw new Error('All assignments already exist');
+      }
+
+      for (const assignment of newAssignments) {
+        // 🚀 NEW: Use subcollection - businessId not stored in document
+        const docRef = await addDoc(collection(db, 'businesses', businessId, 'evaluationAssignments'), {
           evaluatorId: assignment.evaluatorId,
           evaluateeId: assignment.evaluateeId,
           assignedBy,
-          assignedDate: new Date().toISOString(),
+          assignedDate: serverTimestamp(),
           assignmentType: assignment.assignmentType || 'permanent',
           notes: assignment.notes || '',
           active: true,
@@ -216,7 +350,16 @@ export const bulkCreateEvaluationAssignments = createAsyncThunk(
         });
 
         const createdDoc = await getDoc(docRef);
-        createdAssignments.push({ id: createdDoc.id, ...createdDoc.data() });
+        const data = createdDoc.data();
+        createdAssignments.push({ 
+          id: createdDoc.id, 
+          ...data,
+          // Convert Firebase Timestamps to ISO strings for serialization
+          createdAt: data.createdAt?.toDate()?.toISOString() || null,
+          updatedAt: data.updatedAt?.toDate()?.toISOString() || null,
+          assignedDate: data.assignedDate?.toDate()?.toISOString() || null,
+          dueDate: data.dueDate?.toDate()?.toISOString() || null
+        });
       }
 
       return createdAssignments;
@@ -351,22 +494,34 @@ export const selectAssignmentsError = (state) => state.assignments.error;
 
 export const selectEvaluationAssignmentsByEvaluator = createSelector(
   [selectEvaluationAssignments, (state, evaluatorId) => evaluatorId],
-  (assignments, evaluatorId) => assignments.filter(assignment => assignment.evaluatorId === evaluatorId)
+  (assignments, evaluatorId) => assignments.filter(assignment => 
+    assignment.evaluatorId === evaluatorId && 
+    assignment.active === true
+  )
 );
 
 export const selectEvaluationAssignmentsByEvaluatee = createSelector(
   [selectEvaluationAssignments, (state, evaluateeId) => evaluateeId],
-  (assignments, evaluateeId) => assignments.filter(assignment => assignment.evaluateeId === evaluateeId)
+  (assignments, evaluateeId) => assignments.filter(assignment => 
+    assignment.evaluateeId === evaluateeId && 
+    assignment.active === true
+  )
 );
 
 export const selectBonusAssignmentsByAllocator = createSelector(
   [selectBonusAssignments, (state, allocatorId) => allocatorId],
-  (assignments, allocatorId) => assignments.filter(assignment => assignment.allocatorId === allocatorId)
+  (assignments, allocatorId) => assignments.filter(assignment => 
+    assignment.allocatorId === allocatorId && 
+    assignment.active === true
+  )
 );
 
 export const selectBonusAssignmentsByRecipient = createSelector(
   [selectBonusAssignments, (state, recipientId) => recipientId],
-  (assignments, recipientId) => assignments.filter(assignment => assignment.recipientId === recipientId)
+  (assignments, recipientId) => assignments.filter(assignment => 
+    assignment.recipientId === recipientId && 
+    assignment.active === true
+  )
 );
 
 export default assignmentSlice.reducer;

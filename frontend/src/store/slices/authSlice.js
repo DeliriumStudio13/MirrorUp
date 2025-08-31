@@ -30,8 +30,17 @@ export const login = createAsyncThunk(
       
       const firebaseUser = result.user;
       
-      // Get user data from Firestore using database service
-      const userResult = await databaseService.getById('users', firebaseUser.uid);
+      // 🚀 NEW: First get businessId from mapping table
+      const mappingResult = await databaseService.getById('userBusinessMap', firebaseUser.uid);
+      
+      if (!mappingResult.success) {
+        throw new Error('User business mapping not found');
+      }
+      
+      const { businessId } = mappingResult.data;
+      
+      // 🚀 NEW: Get user data from subcollection
+      const userResult = await databaseService.getById(`businesses/${businessId}/users`, firebaseUser.uid);
       
       if (!userResult.success) {
         throw new Error('User profile not found');
@@ -40,14 +49,11 @@ export const login = createAsyncThunk(
       const userData = userResult.data;
       
       // Get business data
-      let businessData = null;
-      if (userData.businessId) {
-        const businessResult = await databaseService.getById('businesses', userData.businessId);
-        businessData = businessResult.success ? businessResult.data : null;
-      }
+      const businessResult = await databaseService.getById('businesses', businessId);
+      const businessData = businessResult.success ? businessResult.data : null;
       
-      // Update last login
-      await databaseService.update('users', firebaseUser.uid, {
+      // 🚀 NEW: Update last login in subcollection
+      await databaseService.update(`businesses/${businessId}/users`, firebaseUser.uid, {
         lastLogin: databaseService.serverTimestamp()
       });
       
@@ -109,9 +115,9 @@ export const registerBusiness = createAsyncThunk(
 
       await databaseService.createWithId('businesses', businessId, businessData);
 
-      // Create admin user document
+      // Create admin user document  
+      // 🚀 NEW: No businessId in document - it's implicit in the subcollection path!
       const userData = {
-        businessId,
         profile: {
           firstName: registrationData.firstName,
           lastName: registrationData.lastName,
@@ -142,11 +148,20 @@ export const registerBusiness = createAsyncThunk(
         updatedAt: databaseService.serverTimestamp()
       };
 
-      await databaseService.createWithId('users', firebaseUser.uid, userData);
+      // 🚀 NEW: Save to subcollection path
+      await databaseService.createWithId(`businesses/${businessId}/users`, firebaseUser.uid, userData);
+      
+      // 🚀 NEW: Create user-business mapping for auth lookups
+      await databaseService.createWithId('userBusinessMap', firebaseUser.uid, {
+        businessId,
+        email: registrationData.adminEmail,
+        role: 'admin',
+        createdAt: databaseService.serverTimestamp()
+      });
 
       // Get the created documents
       const [finalUserResult, finalBusinessResult] = await Promise.all([
-        databaseService.getById('users', firebaseUser.uid),
+        databaseService.getById(`businesses/${businessId}/users`, firebaseUser.uid),
         databaseService.getById('businesses', businessId)
       ]);
 
@@ -179,7 +194,7 @@ export const updateProfile = createAsyncThunk(
       }
       
       // Update user document in Firestore
-      await updateDoc(doc(db, 'users', user.id), {
+      await updateDoc(doc(db, 'businesses', user.businessId, 'users', user.id), {
         ...profileData,
         updatedAt: serverTimestamp()
       });
@@ -191,8 +206,8 @@ export const updateProfile = createAsyncThunk(
       }
       
       // Get updated user data
-      const userDoc = await getDoc(doc(db, 'users', user.id));
-      const userData = { id: userDoc.id, ...userDoc.data() };
+      const userDoc = await getDoc(doc(db, 'businesses', user.businessId, 'users', user.id));
+      const userData = { id: userDoc.id, businessId: user.businessId, ...userDoc.data() };
       
       return userData;
     } catch (error) {
@@ -290,17 +305,54 @@ export const initializeAuth = createAsyncThunk(
         try {
           if (firebaseUser) {
             // User is signed in
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            // First get businessId from mapping table
+            const mappingDoc = await getDoc(doc(db, 'userBusinessMap', firebaseUser.uid));
+            
+            if (!mappingDoc.exists()) {
+              throw new Error('User business mapping not found');
+            }
+            
+            const { businessId } = mappingDoc.data();
+            
+            // Get user data from subcollection
+            const userDoc = await getDoc(doc(db, 'businesses', businessId, 'users', firebaseUser.uid));
             
             if (userDoc.exists()) {
-              const userData = { id: userDoc.id, ...userDoc.data() };
+              const rawUserData = userDoc.data();
               
-              // Get business data if user has businessId
+              // Convert Firebase Timestamps to ISO strings for Redux serialization
+              const userData = {
+                id: userDoc.id,
+                businessId, // Add businessId to user data
+                ...rawUserData,
+                employeeInfo: rawUserData.employeeInfo ? {
+                  ...rawUserData.employeeInfo,
+                  hireDate: rawUserData.employeeInfo.hireDate?.toDate ? 
+                    rawUserData.employeeInfo.hireDate.toDate().toISOString() : 
+                    rawUserData.employeeInfo.hireDate
+                } : undefined,
+                createdAt: rawUserData.createdAt?.toDate ? 
+                  rawUserData.createdAt.toDate().toISOString() : rawUserData.createdAt,
+                updatedAt: rawUserData.updatedAt?.toDate ? 
+                  rawUserData.updatedAt.toDate().toISOString() : rawUserData.updatedAt,
+                lastLogin: rawUserData.lastLogin?.toDate ? 
+                  rawUserData.lastLogin.toDate().toISOString() : rawUserData.lastLogin
+              };
+              
+              // Get business data
+              const businessDoc = await getDoc(doc(db, 'businesses', businessId));
               let businessData = null;
-              if (userData.businessId) {
-                const businessDoc = await getDoc(doc(db, 'businesses', userData.businessId));
-                businessData = businessDoc.exists() ? 
-                  { id: businessDoc.id, ...businessDoc.data() } : null;
+              
+              if (businessDoc.exists()) {
+                const rawBusinessData = businessDoc.data();
+                businessData = {
+                  id: businessDoc.id,
+                  ...rawBusinessData,
+                  createdAt: rawBusinessData.createdAt?.toDate ? 
+                    rawBusinessData.createdAt.toDate().toISOString() : rawBusinessData.createdAt,
+                  updatedAt: rawBusinessData.updatedAt?.toDate ? 
+                    rawBusinessData.updatedAt.toDate().toISOString() : rawBusinessData.updatedAt
+                };
               }
               
               dispatch(authSlice.actions.setAuthData({

@@ -40,7 +40,8 @@ const ReviewEvaluationsPage = () => {
     }
     
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      // 🚀 NEW: Use subcollection path  
+      const userDoc = await getDoc(doc(db, 'businesses', user.businessId, 'users', userId));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const displayName = `${userData.profile?.firstName || userData.firstName || ''} ${userData.profile?.lastName || userData.lastName || ''}`.trim() || userData.email || 'Unknown';
@@ -102,7 +103,10 @@ const ReviewEvaluationsPage = () => {
   const handleDeleteEvaluation = async (evaluationId) => {
     try {
       
-      const result = await dispatch(deleteEvaluation(evaluationId));
+      const result = await dispatch(deleteEvaluation({
+        businessId: user.businessId,
+        evaluationId: evaluationId
+      }));
       
       if (result.type === 'evaluations/deleteEvaluation/fulfilled') {
         
