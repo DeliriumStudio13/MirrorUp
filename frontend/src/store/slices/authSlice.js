@@ -2,6 +2,10 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { authService, databaseService, auth, db } from '../../firebase/services';
+import { fetchUsers } from './userSlice';
+import { fetchDepartments } from './departmentSlice';
+import { fetchEvaluations } from './evaluationSlice';
+import { fetchEvaluationAssignments, fetchBonusAssignments } from './assignmentSlice';
 
 // Get initial auth state
 const getInitialAuthState = () => {
@@ -10,7 +14,7 @@ const getInitialAuthState = () => {
     firebaseUser: null,
     businessData: null,
     isAuthenticated: false,
-    isLoading: true, // Start with loading true until Firebase auth state is determined
+    isLoading: false, // Start with loading false to allow public routes to render
     error: null,
     initialized: false,
   };
@@ -19,7 +23,7 @@ const getInitialAuthState = () => {
 // Async thunks
 export const login = createAsyncThunk(
   'auth/login',
-  async ({ email, password }, { rejectWithValue }) => {
+  async ({ email, password }, { rejectWithValue, dispatch }) => {
     try {
       // Sign in using auth service
       const result = await authService.signIn(email, password);
@@ -56,6 +60,16 @@ export const login = createAsyncThunk(
       await databaseService.update(`businesses/${businessId}/users`, firebaseUser.uid, {
         lastLogin: databaseService.serverTimestamp()
       });
+
+      // Initialize all required data
+      console.log('🔄 Initializing data for business:', businessId);
+      await Promise.all([
+        dispatch({ type: 'departments/fetchDepartments', payload: businessId }),
+        dispatch({ type: 'evaluations/fetchEvaluations', payload: businessId }),
+        dispatch({ type: 'assignments/fetchAssignments', payload: businessId }),
+        dispatch({ type: 'users/fetchUsers', payload: businessId })
+      ]);
+      console.log('✅ Data initialization complete');
       
       return {
         firebaseUser: {
@@ -281,13 +295,19 @@ export const resetPassword = createAsyncThunk(
 
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, dispatch }) => {
     try {
       const result = await authService.signOut();
       
       if (!result.success) {
         throw new Error(result.error);
       }
+
+      // Clear all data from other slices
+      dispatch({ type: 'users/clearUsers' });
+      dispatch({ type: 'departments/clearDepartments' });
+      dispatch({ type: 'evaluations/clearEvaluations' });
+      dispatch({ type: 'assignments/clearAssignments' });
       
       return { message: result.message };
     } catch (error) {
@@ -299,12 +319,36 @@ export const logout = createAsyncThunk(
 // Auth state listener
 export const initializeAuth = createAsyncThunk(
   'auth/initialize',
-  async (_, { dispatch }) => {
+  async (_, { dispatch, getState }) => {
     return new Promise((resolve) => {
+      let previousUserId = null;
+
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         try {
+          // Set loading state when auth check starts
+          dispatch(authSlice.actions.setLoading(true));
+
+          // Clear all data if user has changed
+          const currentState = getState();
+          const currentUserId = currentState.auth.user?.id;
+          
+          if (previousUserId && previousUserId !== currentUserId) {
+            console.log('🔄 User changed, clearing data...', { 
+              previous: previousUserId, 
+              current: currentUserId 
+            });
+            
+            // Clear all data from other slices
+            dispatch({ type: 'users/clearUsers' });
+            dispatch({ type: 'departments/clearDepartments' });
+            dispatch({ type: 'evaluations/clearEvaluations' });
+            dispatch({ type: 'assignments/clearAssignments' });
+          }
+
           if (firebaseUser) {
             // User is signed in
+            console.log('🔐 User signed in:', firebaseUser.uid);
+            
             // First get businessId from mapping table
             const mappingDoc = await getDoc(doc(db, 'userBusinessMap', firebaseUser.uid));
             
@@ -313,12 +357,14 @@ export const initializeAuth = createAsyncThunk(
             }
             
             const { businessId } = mappingDoc.data();
+            console.log('📍 Found business ID:', businessId);
             
             // Get user data from subcollection
             const userDoc = await getDoc(doc(db, 'businesses', businessId, 'users', firebaseUser.uid));
             
             if (userDoc.exists()) {
               const rawUserData = userDoc.data();
+              console.log('👤 Found user data:', userDoc.id);
               
               // Convert Firebase Timestamps to ISO strings for Redux serialization
               const userData = {
@@ -353,8 +399,19 @@ export const initializeAuth = createAsyncThunk(
                   updatedAt: rawBusinessData.updatedAt?.toDate ? 
                     rawBusinessData.updatedAt.toDate().toISOString() : rawBusinessData.updatedAt
                 };
+                console.log('🏢 Found business data:', businessDoc.id);
               }
               
+              // Update previous user ID before dispatching new data
+              previousUserId = userDoc.id;
+
+              // Clear all existing data first
+              dispatch({ type: 'users/clearUsers' });
+              dispatch({ type: 'departments/clearDepartments' });
+              dispatch({ type: 'evaluations/clearEvaluations' });
+              dispatch({ type: 'assignments/clearAssignments' });
+
+              // Set the new auth data
               dispatch(authSlice.actions.setAuthData({
                 firebaseUser: {
                   uid: firebaseUser.uid,
@@ -365,19 +422,41 @@ export const initializeAuth = createAsyncThunk(
                 user: userData,
                 businessData
               }));
+
+              // Load all required data
+              console.log('🔄 Loading initial data for business:', businessId);
+              
+              try {
+                await Promise.all([
+                  dispatch(fetchUsers(businessId)),
+                  dispatch(fetchDepartments(businessId)),
+                  dispatch(fetchEvaluations({ businessId })),
+                  dispatch(fetchEvaluationAssignments(businessId)),
+                  dispatch(fetchBonusAssignments(businessId))
+                ]);
+                console.log('✅ Initial data load complete');
+              } catch (error) {
+                console.error('❌ Error loading initial data:', error);
+              }
+              
+              // Mark auth as initialized after data load
+              dispatch(authSlice.actions.setInitialized(true));
             } else {
               // Firebase user exists but no Firestore document
+              console.log('⚠️ No Firestore document found for user:', firebaseUser.uid);
               dispatch(authSlice.actions.setUnauthenticated());
+              dispatch(authSlice.actions.setInitialized(true));
             }
           } else {
             // User is signed out
+            console.log('🔒 User signed out');
             dispatch(authSlice.actions.setUnauthenticated());
+            dispatch(authSlice.actions.setInitialized(true));
           }
           
-          dispatch(authSlice.actions.setInitialized());
           resolve();
         } catch (error) {
-          console.error('Auth state change error:', error);
+          console.error('❌ Auth state change error:', error);
           dispatch(authSlice.actions.setError(error.message));
           dispatch(authSlice.actions.setInitialized());
           resolve();
@@ -398,6 +477,9 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    setLoading: (state, action) => {
+      state.isLoading = action.payload;
+    },
     setAuthData: (state, action) => {
       const { firebaseUser, user, businessData } = action.payload;
       state.firebaseUser = firebaseUser;
@@ -413,10 +495,13 @@ const authSlice = createSlice({
       state.businessData = null;
       state.isAuthenticated = false;
       state.isLoading = false;
+      state.initialized = true; // Mark as initialized when we know user is not authenticated
     },
-    setInitialized: (state) => {
-      state.initialized = true;
-      state.isLoading = false;
+    setInitialized: (state, action) => {
+      state.initialized = action.payload;
+      if (action.payload) {
+        state.isLoading = false;
+      }
     },
     setError: (state, action) => {
       state.error = action.payload;

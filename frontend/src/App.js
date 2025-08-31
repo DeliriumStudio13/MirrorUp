@@ -1,10 +1,14 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 
-// Redux actions and selectors
-import { initializeAuth, selectIsAuthenticated, selectAuthLoading, selectAuthInitialized } from './store/slices/authSlice';
+// Redux actions
+import { initializeAuth } from './store/slices/authSlice';
 import { loadViewPreferences } from './store/slices/uiSlice';
+
+// Route components
+import ProtectedRoute from './components/routing/ProtectedRoute';
+import PublicRoute from './components/routing/PublicRoute';
 
 // Layout components
 import AuthLayout from './components/layouts/AuthLayout';
@@ -55,42 +59,10 @@ import {
 
 
 // Common components
-import LoadingSpinner from './components/common/LoadingSpinner';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import { LoadingSpinner, ErrorBoundary } from './components/common';
+import AppLoader from './components/common/AppLoader';
 
-// Protected Route component
-const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = useSelector(selectIsAuthenticated);
-  const isLoading = useSelector(selectAuthLoading);
-  const initialized = useSelector(selectAuthInitialized);
-  
-  if (!initialized || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
-  
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-};
 
-// Public Route component (redirect to dashboard if authenticated)
-const PublicRoute = ({ children }) => {
-  const isAuthenticated = useSelector(selectIsAuthenticated);
-  const isLoading = useSelector(selectAuthLoading);
-  const initialized = useSelector(selectAuthInitialized);
-  
-  if (!initialized || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
-  
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
-};
 
 function App() {
   const dispatch = useDispatch();
@@ -106,8 +78,9 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
-        <div className="App">
-          <Routes>
+        <AppLoader>
+          <div className="App">
+            <Routes>
             {/* Public routes */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={
@@ -391,7 +364,8 @@ function App() {
               </div>
             } />
           </Routes>
-        </div>
+          </div>
+        </AppLoader>
       </Router>
     </ErrorBoundary>
   );

@@ -31,6 +31,7 @@ const initialState = {
   },
   isLoading: false,
   error: null,
+  initialized: false,
 };
 
 // Async thunks
@@ -471,6 +472,7 @@ const userSlice = createSlice({
           pageSize: action.payload.pageSize
         };
         state.error = null;
+        state.initialized = true;
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.isLoading = false;
@@ -597,5 +599,6 @@ export const selectUsersPagination = (state) => state.users.pagination;
 export const selectUsersFilters = (state) => state.users.filters;
 export const selectUsersLoading = (state) => state.users.isLoading;
 export const selectUsersError = (state) => state.users.error;
+export const selectUsersInitialized = (state) => state.users.initialized;
 
 export default userSlice.reducer;

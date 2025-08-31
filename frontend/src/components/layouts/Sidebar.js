@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import classNames from 'classnames';
 
 // Redux
-import { selectUser } from '../../store/slices/authSlice';
+import { selectUser, selectAuthInitialized } from '../../store/slices/authSlice';
 import { selectSidebarOpen, setSidebarOpen } from '../../store/slices/uiSlice';
 
 // Icons
@@ -30,6 +30,7 @@ const Sidebar = () => {
   const location = useLocation();
   const user = useSelector(selectUser);
   const sidebarOpen = useSelector(selectSidebarOpen);
+  const authInitialized = useSelector(selectAuthInitialized);
 
   const closeSidebar = () => {
     dispatch(setSidebarOpen(false));
@@ -37,6 +38,18 @@ const Sidebar = () => {
 
   // Navigation items based on user role
   const getNavigationItems = () => {
+    // Return only dashboard if auth is not initialized
+    if (!authInitialized || !user) {
+      return [
+        {
+          name: 'Dashboard',
+          href: '/dashboard',
+          icon: HomeIcon,
+          current: location.pathname === '/dashboard'
+        }
+      ];
+    }
+
     const baseItems = [
       {
         name: 'Dashboard',
@@ -325,27 +338,29 @@ const Sidebar = () => {
           </nav>
 
           {/* User info */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
-            <div className="flex-shrink-0 w-full">
-              <div className="flex items-center">
-                <div>
-                  <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
-                    <span className="text-white font-medium text-sm">
-                      {user?.profile?.firstName?.charAt(0)}{user?.profile?.lastName?.charAt(0)}
-                    </span>
+          {authInitialized && user && (
+            <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex-shrink-0 w-full">
+                <div className="flex items-center">
+                  <div>
+                    <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
+                      <span className="text-white font-medium text-sm">
+                        {user?.profile?.firstName?.charAt(0)}{user?.profile?.lastName?.charAt(0)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                    {user?.profile?.firstName} {user?.profile?.lastName}
-                  </p>
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize">
-                    {user?.role}
-                  </p>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {user?.profile?.firstName} {user?.profile?.lastName}
+                    </p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize">
+                      {user?.role}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -444,27 +459,29 @@ const Sidebar = () => {
           </div>
 
           {/* Mobile user info */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
-            <div className="flex-shrink-0 w-full">
-              <div className="flex items-center">
-                <div>
-                  <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
-                    <span className="text-white font-medium text-sm">
-                      {user?.profile?.firstName?.charAt(0)}{user?.profile?.lastName?.charAt(0)}
-                    </span>
+          {authInitialized && user && (
+            <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex-shrink-0 w-full">
+                <div className="flex items-center">
+                  <div>
+                    <div className="inline-block h-10 w-10 rounded-full bg-primary-500 flex items-center justify-center">
+                      <span className="text-white font-medium text-sm">
+                        {user?.profile?.firstName?.charAt(0)}{user?.profile?.lastName?.charAt(0)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="ml-3">
-                  <p className="text-base font-medium text-gray-700 dark:text-gray-200">
-                    {user?.profile?.firstName} {user?.profile?.lastName}
-                  </p>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 capitalize">
-                    {user?.role}
-                  </p>
+                  <div className="ml-3">
+                    <p className="text-base font-medium text-gray-700 dark:text-gray-200">
+                      {user?.profile?.firstName} {user?.profile?.lastName}
+                    </p>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 capitalize">
+                      {user?.role}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </>

@@ -19,6 +19,7 @@ const initialState = {
   hierarchy: [],
   isLoading: false,
   error: null,
+  initialized: false,
 };
 
 // Async thunks
@@ -335,6 +336,7 @@ const departmentSlice = createSlice({
         state.isLoading = false;
         state.departments = action.payload;
         state.error = null;
+        state.initialized = true;
       })
       .addCase(fetchDepartments.rejected, (state, action) => {
         state.isLoading = false;
@@ -439,6 +441,7 @@ export const selectSelectedDepartment = (state) => state.departments.selectedDep
 export const selectDepartmentHierarchy = (state) => state.departments.hierarchy;
 export const selectDepartmentsLoading = (state) => state.departments.isLoading;
 export const selectDepartmentsError = (state) => state.departments.error;
+export const selectDepartmentsInitialized = (state) => state.departments.initialized;
 
 export default departmentSlice.reducer;
 

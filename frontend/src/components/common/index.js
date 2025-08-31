@@ -1,5 +1,6 @@
 // Export all common components for easy importing
 export { default as LoadingSpinner } from './LoadingSpinner';
+export { default as LoadingOverlay } from './LoadingOverlay';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as Button } from './Button';
 export { default as Card } from './Card';
@@ -8,3 +9,4 @@ export { default as Input } from './Input';
 export { default as TextArea } from './TextArea';
 export { default as Select } from './Select';
 export { default as Modal } from './Modal';
+export { default as AppInitializer } from './AppInitializer';

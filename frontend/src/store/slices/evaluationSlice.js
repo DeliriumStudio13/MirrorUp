@@ -63,6 +63,7 @@ const initialState = {
   isLoading: false,
   templatesLoading: false,
   error: null,
+  initialized: false // Track if initial data load is complete
 };
 
 // Async thunks for Evaluations
@@ -648,6 +649,7 @@ const evaluationSlice = createSlice({
           lastVisible: null // Don't store Firebase QueryDocumentSnapshot in Redux
         };
         state.error = null;
+        state.initialized = true; // Mark as initialized after successful fetch
       })
       .addCase(fetchEvaluations.rejected, (state, action) => {
         state.isLoading = false;
@@ -809,6 +811,7 @@ export const selectEvaluationsFilters = (state) => state.evaluations.filters;
 export const selectEvaluationsLoading = (state) => state.evaluations.isLoading;
 export const selectTemplatesLoading = (state) => state.evaluations.templatesLoading;
 export const selectEvaluationsError = (state) => state.evaluations.error;
+export const selectEvaluationsInitialized = (state) => state.evaluations.initialized;
 
 // Evaluation migration utility
 export const fixEvaluationAssignedBy = createAsyncThunk(

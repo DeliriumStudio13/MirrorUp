@@ -8,13 +8,14 @@ import toast from 'react-hot-toast';
 import { login, clearError, selectAuthLoading, selectAuthError } from '../../store/slices/authSlice';
 
 // Components
-import { Button, Input, Card } from '../../components/common';
+import { Button, Input, Card, LoadingOverlay } from '../../components/common';
 
 // Icons
 import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const isLoading = useSelector(selectAuthLoading);
@@ -46,9 +47,16 @@ const LoginPage = () => {
 
   const onSubmit = async (data) => {
     try {
+      const loadingToast = toast.loading('Signing in...');
       await dispatch(login(data)).unwrap();
+      toast.dismiss(loadingToast);
       toast.success('Login successful!');
-      navigate('/dashboard');
+      
+      // Show loading overlay and refresh the page
+      setIsRefreshing(true);
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 100);
     } catch (error) {
       // Error is handled by the useEffect above
       console.error('Login failed:', error);
@@ -60,7 +68,9 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
+    <>
+      {isRefreshing && <LoadingOverlay message="Initializing your dashboard..." />}
+      <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
@@ -193,6 +203,7 @@ const LoginPage = () => {
         </p>
       </div>
     </div>
+    </>
   );
 };
 

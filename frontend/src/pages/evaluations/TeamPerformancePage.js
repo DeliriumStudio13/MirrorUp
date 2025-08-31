@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 
 // Redux
 import { selectUser } from '../../store/slices/authSlice';
-import { fetchUsers } from '../../store/slices/userSlice';
-import { fetchDepartments } from '../../store/slices/departmentSlice';
-import { fetchEvaluations } from '../../store/slices/evaluationSlice';
+import { fetchUsers, selectUsersInitialized } from '../../store/slices/userSlice';
+import { fetchDepartments, selectDepartmentsInitialized } from '../../store/slices/departmentSlice';
+import { fetchEvaluations, selectEvaluationsInitialized } from '../../store/slices/evaluationSlice';
 
 // Firebase
 import { db } from '../../firebase/config';
@@ -57,6 +57,9 @@ const TeamPerformancePage = () => {
   const user = useSelector(selectUser);
   const { users, loading: usersLoading } = useSelector(state => state.users);
   const { departments } = useSelector(state => state.departments);
+  const usersInitialized = useSelector(selectUsersInitialized);
+  const departmentsInitialized = useSelector(selectDepartmentsInitialized);
+  const evaluationsInitialized = useSelector(selectEvaluationsInitialized);
   
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamMembersByDept, setTeamMembersByDept] = useState({});
@@ -109,101 +112,120 @@ const TeamPerformancePage = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.businessId) return;
+      if (!user?.businessId) {
+        console.log('No business ID available, waiting...');
+        return;
+      }
       
       setLoading(true);
       
       try {
-        // Load users and departments
-        await dispatch(fetchUsers(user.businessId));
-        await dispatch(fetchDepartments(user.businessId));
+        console.log('🔄 Loading team performance data for business:', user.businessId);
         
         // Load evaluations assigned by this manager
-        const managerId = user?.uid || user?.id;
+        const managerId = user.id;
         if (managerId) {
+          console.log('📊 Fetching evaluations for manager:', managerId);
           const evaluationResult = await dispatch(fetchEvaluations({
             businessId: user.businessId,
             filters: { evaluator: managerId }
-          }));
+          })).unwrap();
           
-          if (evaluationResult.payload) {
-            setEvaluations(evaluationResult.payload.evaluations || []);
-          }
+          console.log('✅ Evaluations loaded:', evaluationResult?.evaluations?.length || 0);
+          setEvaluations(evaluationResult?.evaluations || []);
         }
       } catch (error) {
-        console.error('Error loading team performance data:', error);
+        console.error('❌ Error loading team performance data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
-  }, [dispatch, user?.businessId, user?.uid, user?.id]);
+    // Only load data if we have all required data from the store
+    if (user?.businessId && usersInitialized && departmentsInitialized && evaluationsInitialized) {
+      console.log('🔄 Dependencies loaded, fetching team performance data...');
+      loadData();
+    } else {
+      console.log('⏳ Waiting for dependencies...', { 
+        businessId: user?.businessId,
+        usersInitialized,
+        departmentsInitialized,
+        evaluationsInitialized
+      });
+    }
+  }, [dispatch, user?.businessId, user?.id, usersInitialized, departmentsInitialized, evaluationsInitialized]);
 
   useEffect(() => {
-    if (users && user && departments) {
-      // Filter team members based on hierarchical relationships
-      let filteredUsers = [];
-      let relevantDepartments = [];
-      
-      if (user.role === 'admin' || user.role === 'hr') {
-        // Admin and HR can see all departments
-        relevantDepartments = departments;
-        filteredUsers = users.filter(u => u.id !== user.id);
-      } else if (user.role === 'head-manager') {
-        // Head managers see their own department and all child departments
-        const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
-        if (userDept) {
-          relevantDepartments = [userDept];
-          // Add all child departments recursively
-          const addChildDepartments = (parentId) => {
-            const children = departments.filter(d => d.parentDepartment === parentId);
-            relevantDepartments.push(...children);
-            children.forEach(child => addChildDepartments(child.id));
-          };
-          addChildDepartments(userDept.id);
-        }
-        
-        // Filter users to only include those in relevant departments
-        filteredUsers = users.filter(u => {
-          if (u.id === user.id) return false;
-          return relevantDepartments.some(dept => dept.id === u.employeeInfo?.department);
-        });
-      } else if (user.role === 'manager') {
-        // Managers see their own department
-        const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
-        if (userDept) {
-          relevantDepartments = [userDept];
-        }
-        
-        filteredUsers = users.filter(u => {
-          if (u.id === user.id) return false;
-          return u.employeeInfo?.department === user.employeeInfo?.department;
-        });
-      }
-
-      // Group users by department
-      const membersByDept = {};
-      relevantDepartments.forEach(dept => {
-        const deptMembers = filteredUsers.filter(u => u.employeeInfo?.department === dept.id);
-        if (deptMembers.length > 0) {
-          membersByDept[dept.id] = {
-            department: dept,
-            members: deptMembers
-          };
-        }
-      });
-
-      setTeamMembers(filteredUsers);
-      setTeamMembersByDept(membersByDept);
-      
-      // Load bonus allocations for all member departments
-      const memberDepartments = filteredUsers.map(u => u.employeeInfo?.department).filter(Boolean);
-      if (memberDepartments.length > 0) {
-        loadBonusAllocations(memberDepartments);
-      }
+    if (!user?.businessId || !usersInitialized || !departmentsInitialized || !users?.length || !departments?.length) {
+      return;
     }
-  }, [users, user, departments]);
+
+    // Filter team members based on hierarchical relationships
+    let filteredUsers = [];
+    let relevantDepartments = [];
+    
+    if (user.role === 'admin' || user.role === 'hr') {
+      // Admin and HR can see all departments
+      relevantDepartments = departments;
+      filteredUsers = users.filter(u => u.id !== user.id);
+    } else if (user.role === 'head-manager') {
+      // Head managers see their own department and all child departments
+      const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
+      if (userDept) {
+        relevantDepartments = [userDept];
+        // Add all child departments recursively
+        const addChildDepartments = (parentId) => {
+          const children = departments.filter(d => d.parentDepartment === parentId);
+          relevantDepartments.push(...children);
+          children.forEach(child => addChildDepartments(child.id));
+        };
+        addChildDepartments(userDept.id);
+      }
+      
+      // Filter users to only include those in relevant departments
+      filteredUsers = users.filter(u => {
+        if (u.id === user.id) return false;
+        return relevantDepartments.some(dept => dept.id === u.employeeInfo?.department);
+      });
+    } else if (user.role === 'manager') {
+      // Managers see their own department
+      const userDept = departments?.find(d => d.id === user.employeeInfo?.department);
+      if (userDept) {
+        relevantDepartments = [userDept];
+      }
+      
+      filteredUsers = users.filter(u => {
+        if (u.id === user.id) return false;
+        return u.employeeInfo?.department === user.employeeInfo?.department;
+      });
+    }
+
+    // Group users by department
+    const membersByDept = {};
+    relevantDepartments.forEach(dept => {
+      const deptMembers = filteredUsers.filter(u => u.employeeInfo?.department === dept.id);
+      if (deptMembers.length > 0) {
+        membersByDept[dept.id] = {
+          department: dept,
+          members: deptMembers
+        };
+      }
+    });
+
+    console.log('🔄 Setting team members:', { 
+      filteredUsers: filteredUsers.length,
+      departments: Object.keys(membersByDept).length
+    });
+
+    setTeamMembers(filteredUsers);
+    setTeamMembersByDept(membersByDept);
+    
+    // Load bonus allocations for all member departments
+    const memberDepartments = filteredUsers.map(u => u.employeeInfo?.department).filter(Boolean);
+    if (memberDepartments.length > 0) {
+      loadBonusAllocations(memberDepartments);
+    }
+  }, [user?.businessId, users, departments, usersInitialized, departmentsInitialized]);
 
   // Helper functions
   const getEvaluationStatsForMember = (memberId) => {
@@ -425,10 +447,18 @@ const TeamPerformancePage = () => {
     return acc;
   }, {});
 
-  if (loading || usersLoading) {
+  // Check if all required data is initialized
+  if (!usersInitialized || !departmentsInitialized || !evaluationsInitialized || loading || usersLoading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
+      <div className="flex flex-col items-center justify-center min-h-96">
         <LoadingSpinner size="large" />
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading team performance data...</p>
+        <div className="mt-2 text-sm text-gray-500">
+          {!usersInitialized && <p>• Loading users...</p>}
+          {!departmentsInitialized && <p>• Loading departments...</p>}
+          {!evaluationsInitialized && <p>• Loading evaluations...</p>}
+          {loading && <p>• Processing data...</p>}
+        </div>
       </div>
     );
   }
