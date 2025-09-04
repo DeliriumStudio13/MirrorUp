@@ -108,6 +108,7 @@ const AssignmentManagementPage = () => {
 
   // Get user display name helper
   const getUserDisplayName = (userId) => {
+    if (!userId) return 'Unknown User';
     const user = users.find(u => u.id === userId);
     return user ? `${user.profile.firstName} ${user.profile.lastName}` : 'Unknown User';
   };
@@ -125,39 +126,51 @@ const AssignmentManagementPage = () => {
     return dept?.name || 'No Department';
   };
 
-  // Check if user is in evaluator's department hierarchy
-  const isInDepartmentHierarchy = (evaluatorId, evaluateeId) => {
-    const evaluator = users.find(u => u.id === evaluatorId);
-    const evaluatee = users.find(u => u.id === evaluateeId);
-
-    if (!evaluator || !evaluatee) return false;
-
-    // HR and admin can evaluate anyone
-    if (['admin', 'hr'].includes(evaluator.role)) return true;
-
-    // Get evaluator's department and its children
-    const evaluatorDept = departments.find(d => d.id === evaluator.employeeInfo?.department);
-    if (!evaluatorDept) return false;
-
-    const evaluateeDept = departments.find(d => d.id === evaluatee.employeeInfo?.department);
-    if (!evaluateeDept) return false;
-
-    // Check if evaluatee's department is the same or a child of evaluator's department
-    const isChild = (parentId, childId) => {
-      if (parentId === childId) return true;
-      const child = departments.find(d => d.id === childId);
-      if (!child || !child.parentDepartment) return false;
-      return isChild(parentId, child.parentDepartment);
-    };
-
-    return isChild(evaluatorDept.id, evaluateeDept.id);
+  // Get parent chain for a department
+  const getParentChain = (deptId) => {
+    const chain = [deptId];
+    const deptMap = new Map(departments.map(d => [d.id, d]));
+    
+    let current = deptMap.get(deptId);
+    while (current?.parentDepartment) {
+      chain.push(current.parentDepartment);
+      current = deptMap.get(current.parentDepartment);
+    }
+    
+    return chain;
   };
 
-  // Validate assignment
-  const validateAssignment = () => {
-    const evaluatorId = activeTab === 'evaluation' ? assignmentForm.evaluatorId : assignmentForm.allocatorId;
-    const evaluateeId = activeTab === 'evaluation' ? assignmentForm.evaluateeId : assignmentForm.recipientId;
+  // Check if a department is in another department's hierarchy
+  const isInDepartmentHierarchy = (parentDeptId, childDeptId) => {
+    if (!parentDeptId || !childDeptId) return false;
+    if (parentDeptId === childDeptId) return true;
+    
+    const parentChain = getParentChain(childDeptId);
+    return parentChain.includes(parentDeptId);
+  };
 
+  // Check if a user can manage another user based on department hierarchy
+  const canManageUser = (managerId, userId) => {
+    const manager = users.find(u => u.id === managerId);
+    const user = users.find(u => u.id === userId);
+
+    if (!manager || !user) return false;
+
+    // Admin and HR can manage anyone
+    if (['admin', 'hr'].includes(manager.role)) return true;
+
+    // Get departments
+    const managerDept = departments.find(d => d.id === manager.employeeInfo?.department);
+    const userDept = departments.find(d => d.id === user.employeeInfo?.department);
+
+    if (!managerDept || !userDept) return false;
+
+    // Check department hierarchy
+    return isInDepartmentHierarchy(managerDept.id, userDept.id);
+  };
+
+  // Validate users for assignment
+  const validateUsers = (evaluatorId, evaluateeId) => {
     // Check if users exist
     const evaluator = users.find(u => u.id === evaluatorId);
     const evaluatee = users.find(u => u.id === evaluateeId);
@@ -170,28 +183,64 @@ const AssignmentManagementPage = () => {
       throw new Error('Users cannot evaluate/allocate to themselves');
     }
 
-    // Check role permissions
-    if (activeTab === 'evaluation') {
+    return { evaluator, evaluatee };
+  };
+
+  // Validate role permissions
+  const validateRolePermissions = (evaluator, isEvaluation) => {
+    if (isEvaluation) {
       if (!['admin', 'hr', 'head-manager', 'manager', 'supervisor'].includes(evaluator.role)) {
         throw new Error('Selected evaluator does not have permission to evaluate');
       }
     } else {
-      if (!['admin', 'hr'].includes(evaluator.role)) {
-        throw new Error('Only HR and admin can allocate bonus');
+      if (!['admin', 'hr', 'head-manager'].includes(evaluator.role)) {
+        throw new Error('Only HR, admin, and head managers can allocate bonus');
       }
     }
+  };
 
-    // Check department hierarchy for evaluations
-    if (activeTab === 'evaluation' && !isInDepartmentHierarchy(evaluatorId, evaluateeId)) {
-      throw new Error('Evaluator can only evaluate users in their department hierarchy');
+  // Validate department hierarchy
+  const validateDepartmentHierarchy = (evaluator, evaluatee) => {
+    const evaluatorDept = evaluator.employeeInfo?.department;
+    const evaluateeDept = evaluatee.employeeInfo?.department;
+
+    if (!evaluatorDept || !evaluateeDept) {
+      throw new Error('Both users must be assigned to departments');
     }
 
-    // Check budget limit for bonus assignments
-    if (activeTab === 'bonus' && assignmentForm.budgetLimit) {
-      const limit = parseFloat(assignmentForm.budgetLimit);
-      if (isNaN(limit) || limit <= 0) {
-        throw new Error('Budget limit must be a positive number');
-      }
+    if (!isInDepartmentHierarchy(evaluatorDept, evaluateeDept)) {
+      throw new Error('Can only assign to users in their department hierarchy');
+    }
+  };
+
+  // Validate budget limit
+  const validateBudgetLimit = (limit) => {
+    if (!limit) return;
+    const numLimit = parseFloat(limit);
+    if (isNaN(numLimit) || numLimit <= 0) {
+      throw new Error('Budget limit must be a positive number');
+    }
+  };
+
+  // Main validation function
+  const validateAssignment = () => {
+    const evaluatorId = activeTab === 'evaluation' ? assignmentForm.evaluatorId : assignmentForm.allocatorId;
+    const evaluateeId = activeTab === 'evaluation' ? assignmentForm.evaluateeId : assignmentForm.recipientId;
+
+    // Validate users
+    const { evaluator, evaluatee } = validateUsers(evaluatorId, evaluateeId);
+
+    // Validate role permissions
+    validateRolePermissions(evaluator, activeTab === 'evaluation');
+
+    // Check department hierarchy if not admin/hr
+    if (!['admin', 'hr'].includes(evaluator.role)) {
+      validateDepartmentHierarchy(evaluator, evaluatee);
+    }
+
+    // Validate budget limit for bonus assignments
+    if (activeTab === 'bonus') {
+      validateBudgetLimit(assignmentForm.budgetLimit);
     }
 
     return true;
@@ -210,9 +259,15 @@ const AssignmentManagementPage = () => {
         ...assignmentForm
       };
 
+      // Remove unused fields based on assignment type
       if (activeTab === 'evaluation') {
+        delete assignmentData.allocatorId;
+        delete assignmentData.recipientId;
+        delete assignmentData.budgetLimit;
         await dispatch(createEvaluationAssignment(assignmentData)).unwrap();
       } else {
+        delete assignmentData.evaluatorId;
+        delete assignmentData.evaluateeId;
         await dispatch(createBonusAssignment(assignmentData)).unwrap();
       }
 
@@ -284,18 +339,35 @@ const AssignmentManagementPage = () => {
       // Validate assignments
       validateBulkAssignments();
 
-      const assignments = bulkAssignments.map(evaluateeId => ({
-        evaluatorId: selectedEvaluator,
-        evaluateeId,
-        assignmentType: 'permanent',
-        notes: `Bulk assigned for ${getDepartmentName(evaluateeId)}`
-      }));
+      if (activeTab === 'evaluation') {
+        const assignments = bulkAssignments.map(evaluateeId => ({
+          evaluatorId: selectedEvaluator,
+          evaluateeId,
+          assignmentType: 'permanent',
+          notes: `Bulk assigned for ${getDepartmentName(evaluateeId)}`
+        }));
 
-      await dispatch(bulkCreateEvaluationAssignments({
-        assignments,
-        businessId: user.businessId,
-        assignedBy: user.uid || user.id
-      })).unwrap();
+        await dispatch(bulkCreateEvaluationAssignments({
+          assignments,
+          businessId: user.businessId,
+          assignedBy: user.uid || user.id
+        })).unwrap();
+      } else {
+        // Create multiple bonus assignments
+        const createPromises = bulkAssignments.map(recipientId => 
+          dispatch(createBonusAssignment({
+            businessId: user.businessId,
+            allocatorId: selectedEvaluator,
+            recipientId,
+            assignmentType: 'permanent',
+            notes: `Bulk assigned for ${getDepartmentName(recipientId)}`,
+            assignedBy: user.uid || user.id,
+            assignedDate: new Date().toISOString()
+          })).unwrap()
+        );
+
+        await Promise.all(createPromises);
+      }
 
       setShowBulkModal(false);
       resetBulkForm();
@@ -313,13 +385,19 @@ const AssignmentManagementPage = () => {
       const updates = { ...assignmentForm };
       delete updates.businessId;
 
+      // Remove unused fields based on assignment type
       if (activeTab === 'evaluation') {
+        delete updates.allocatorId;
+        delete updates.recipientId;
+        delete updates.budgetLimit;
         await dispatch(updateEvaluationAssignment({
           businessId: user.businessId,
           assignmentId: editingAssignment.id,
           updates
         })).unwrap();
       } else {
+        delete updates.evaluatorId;
+        delete updates.evaluateeId;
         await dispatch(updateBonusAssignment({
           businessId: user.businessId,
           assignmentId: editingAssignment.id,
@@ -331,6 +409,9 @@ const AssignmentManagementPage = () => {
       resetForm();
     } catch (error) {
       console.error('Error updating assignment:', error);
+      // Show error to user
+      dispatch(clearError());
+      setLocalError(error.message);
     }
   };
 
@@ -378,17 +459,35 @@ const AssignmentManagementPage = () => {
   // Filter users for evaluator/allocator selection
   const getEvaluatorOptions = () => {
     if (activeTab === 'evaluation') {
-      // For evaluations: get users who have evaluation assignments
+      // For evaluations: get users who can evaluate others
       return users.filter(u => {
-        // Check if user has any evaluation assignments
-        const hasAssignments = evaluationAssignments.some(
-          assignment => assignment.evaluatorId === u.id && assignment.active
-        );
-        return hasAssignments || ['admin', 'hr'].includes(u.role);
+        // Admin and HR can evaluate anyone
+        if (['admin', 'hr'].includes(u.role)) return true;
+
+        // Head managers, managers, and supervisors can evaluate their department and sub-departments
+        if (['head-manager', 'manager', 'supervisor'].includes(u.role)) {
+          // Check if user has any evaluation assignments
+          const hasAssignments = evaluationAssignments.some(
+            assignment => assignment.evaluatorId === u.id && assignment.active
+          );
+          return hasAssignments || u.employeeInfo?.department;
+        }
+
+        return false;
       });
     } else {
-      // For bonus: only HR and admin can allocate bonus
-      return users.filter(u => ['admin', 'hr'].includes(u.role));
+      // For bonus: HR, admin, and head managers can allocate bonus
+      return users.filter(u => {
+        // Admin and HR can allocate to anyone
+        if (['admin', 'hr'].includes(u.role)) return true;
+
+        // Head managers can allocate to their department and sub-departments
+        if (u.role === 'head-manager') {
+          return u.employeeInfo?.department;
+        }
+
+        return false;
+      });
     }
   };
 
@@ -407,37 +506,100 @@ const AssignmentManagementPage = () => {
       if (u.id === currentUser.id) return false;
 
       if (activeTab === 'evaluation') {
-        // For evaluations: check if there's an assignment
+        // Admin and HR can evaluate anyone except admins
         if (['admin', 'hr'].includes(currentUser.role)) {
-          // Admin and HR can evaluate anyone except admins
           return true;
         }
 
-        // Check if there's an active assignment for this evaluator-evaluatee pair
-        const hasAssignment = evaluationAssignments.some(
-          assignment => 
-            assignment.evaluatorId === currentUser.id && 
-            assignment.evaluateeId === u.id &&
-            assignment.active
-        );
+        // Head managers, managers, and supervisors can evaluate their department and sub-departments
+        if (['head-manager', 'manager', 'supervisor'].includes(currentUser.role)) {
+          // Check if there's an active assignment
+          const hasAssignment = evaluationAssignments.some(
+            assignment => 
+              assignment.evaluatorId === currentUser.id && 
+              assignment.evaluateeId === u.id &&
+              assignment.active
+          );
 
-        return hasAssignment;
+          // If there's an assignment, allow it
+          if (hasAssignment) return true;
+
+          // If no assignment, check department hierarchy
+          return canManageUser(currentUser.id, u.id);
+        }
+
+        return false;
       } else {
-        // For bonus: HR and admin can allocate to anyone except admins
-        return ['admin', 'hr'].includes(currentUser.role);
+        // For bonus allocations
+        
+        // Admin and HR can allocate to anyone except admins
+        if (['admin', 'hr'].includes(currentUser.role)) {
+          return true;
+        }
+
+        // Head managers can allocate to their department and sub-departments
+        if (currentUser.role === 'head-manager') {
+          return canManageUser(currentUser.id, u.id);
+        }
+
+        return false;
       }
     });
   };
 
   // Filter users for bulk assignment based on department
   const getBulkEvaluateeOptions = () => {
-    if (!selectedDepartment) return [];
+    if (!selectedDepartment || !selectedEvaluator) return [];
+
+    const evaluator = users.find(u => u.id === selectedEvaluator);
+    if (!evaluator) return [];
     
-    return users.filter(u => 
-      u.employeeInfo?.department === selectedDepartment && 
-      !['admin', 'hr'].includes(u.role) &&
-      u.id !== selectedEvaluator
-    );
+    return users.filter(u => {
+      // Basic checks
+      if (u.id === selectedEvaluator) return false; // No self-assignments
+      if (u.role === 'admin') return false; // No admin recipients
+      if (!u.employeeInfo?.department) return false; // Must have department
+
+      // Get departments
+      const userDept = departments.find(d => d.id === u.employeeInfo.department);
+      const selectedDept = departments.find(d => d.id === selectedDepartment);
+      if (!userDept || !selectedDept) return false;
+
+      // Check if user is in selected department or its children
+      if (!isInDepartmentHierarchy(selectedDepartment, userDept.id)) return false;
+
+      if (activeTab === 'evaluation') {
+        // For evaluations
+        if (['admin', 'hr'].includes(evaluator.role)) {
+          return true;
+        }
+
+        if (['head-manager', 'manager', 'supervisor'].includes(evaluator.role)) {
+          // Check if evaluator has permission for this department
+          const evaluatorDept = departments.find(d => d.id === evaluator.employeeInfo?.department);
+          if (!evaluatorDept) return false;
+
+          // Check if selected department is under evaluator's department
+          return isInDepartmentHierarchy(evaluatorDept.id, selectedDepartment);
+        }
+      } else {
+        // For bonus allocations
+        if (['admin', 'hr'].includes(evaluator.role)) {
+          return true;
+        }
+
+        if (evaluator.role === 'head-manager') {
+          // Check if evaluator has permission for this department
+          const evaluatorDept = departments.find(d => d.id === evaluator.employeeInfo?.department);
+          if (!evaluatorDept) return false;
+
+          // Check if selected department is under evaluator's department
+          return isInDepartmentHierarchy(evaluatorDept.id, selectedDepartment);
+        }
+      }
+
+      return false;
+    });
   };
 
   // Get current assignments to display
@@ -471,7 +633,7 @@ const AssignmentManagementPage = () => {
                 onClick={() => setShowBulkModal(true)}
                 disabled={usersLoading}
               >
-                Bulk Assign
+                Bulk Assign {activeTab === 'evaluation' ? 'Evaluations' : 'Bonuses'}
               </Button>
               <Button
                 variant="primary"
@@ -480,7 +642,7 @@ const AssignmentManagementPage = () => {
                 onClick={() => setShowCreateModal(true)}
                 disabled={usersLoading}
               >
-                New Assignment
+                New {activeTab === 'evaluation' ? 'Evaluation' : 'Bonus'} Assignment
               </Button>
             </div>
           </div>
@@ -654,7 +816,9 @@ const AssignmentManagementPage = () => {
             setEditingAssignment(null);
             resetForm();
           }}
-          title={editingAssignment ? `Edit ${activeTab} Assignment` : `Create ${activeTab} Assignment`}
+          title={editingAssignment 
+            ? `Edit ${activeTab === 'evaluation' ? 'Evaluation' : 'Bonus'} Assignment` 
+            : `Create ${activeTab === 'evaluation' ? 'Evaluation' : 'Bonus'} Assignment`}
           maxWidth="2xl"
         >
           <div className="space-y-6">
@@ -792,25 +956,25 @@ const AssignmentManagementPage = () => {
             setShowBulkModal(false);
             resetBulkForm();
           }}
-          title="Bulk Create Evaluation Assignments"
+          title={`Bulk Create ${activeTab === 'evaluation' ? 'Evaluation' : 'Bonus'} Assignments`}
           maxWidth="2xl"
         >
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Evaluator Selection */}
+              {/* Evaluator/Allocator Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Evaluator (will evaluate all selected)
+                  {activeTab === 'evaluation' ? 'Evaluator' : 'Allocator'} (will {activeTab === 'evaluation' ? 'evaluate' : 'allocate to'} all selected)
                 </label>
                 <Select
                   value={selectedEvaluator}
                   onChange={(e) => setSelectedEvaluator(e.target.value)}
                   required
-                  placeholder="Select Evaluator"
+                  placeholder={`Select ${activeTab === 'evaluation' ? 'Evaluator' : 'Allocator'}`}
                   options={users.length > 0 ? getEvaluatorOptions().map(user => ({
                     value: user.id,
                     label: `${user.profile?.firstName || 'Unknown'} ${user.profile?.lastName || ''} (${user.role})`
-                  })) : [{ value: '', label: 'Loading evaluators...', disabled: true }]}
+                  })) : [{ value: '', label: `Loading ${activeTab === 'evaluation' ? 'evaluators' : 'allocators'}...`, disabled: true }]}
                 />
               </div>
 
